@@ -1,17 +1,18 @@
+from functools import partial
 
 import cv2
 import numpy as np
-from functools import partial
 
 
 class FaceDetector:
     def __init__(self, config):
-        self.name =  config.detector
+        self.name = config.detector
         self.detect = self.define_detection_model(config)
 
     def define_detection_model(self, config):
         """
         Gets face detector object
+        TODO add MTCNN
         :param detector_name:
         :return:
         """
@@ -42,6 +43,3 @@ class FaceDetector:
                 (startX, startY, endX, endY) = box.astype("int")
                 faces.append((startX, startY, endX, endY))
         return faces
-
-
-

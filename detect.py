@@ -1,16 +1,11 @@
 import argparse
 
 import cv2
-import dlib as dlib
 import imutils
 from imutils.video import VideoStream
-from imutils.video import VideoStream
-from imutils.video import FPS
-from centroidtracker import CentroidTracker
-from functools import partial
 
 from face_detection import FaceDetector
-from trackableface import TrackableFace
+from face_tracking import TrackableFace, MultipleFaceTracker
 
 
 def start_tracking(config):
@@ -23,29 +18,19 @@ def start_tracking(config):
     face_size = config.face_size
     conf = config.detection_conf
     vs = VideoStream(src=0).start()
-    writer = None
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
     W = None
     H = None
 
+    totalFrames = 0
+    trackableFaces = {}
+
     # instantiate our centroid tracker, then initialize a list to store
     # each of our dlib correlation trackers, followed by a dictionary to
     # map each unique object ID to a TrackableFace
-    ct = CentroidTracker(maxDisappeared=40, maxDistance=50)
-    trackers = [] # array of trackers
-    trackableFaces = {}
-
-    # initialize the total number of frames processed thus far, along
-    # with the total number of objects that have moved either up or down
-    totalFrames = 0
-    totalDown = 0
-    totalUp = 0
-
-    # start the frames per second throughput estimator
-    fps = FPS().start()
-    # define face detection funciton
+    ct = MultipleFaceTracker(tracker_type='correlation', max_disappeared=40, max_distance=50)
     fd = FaceDetector(config)
 
     while True:
@@ -60,34 +45,26 @@ def start_tracking(config):
 
         if totalFrames % detection_rate == 0:
             status = "Detecting"
-            trackers = []
             face_boxes = fd.detect(frame=frame, conf=conf)
-            for (i, (startX, startY, endX, endY)) in enumerate(face_boxes):
-                tracker = dlib.correlation_tracker()
-                rect = dlib.rectangle(startX, startY, endX, endY)
-                tracker.start_track(rgb, rect)
-                trackers.append(tracker)
+            ct.update_trackers(rgb, face_boxes)
         else:
-            # activate tracking
-            for tracker in trackers:
-                status = "Tracking"
-                tracker.update(rgb)
-                pos = tracker.get_position()
-                # unpack positions
-                startX = int(pos.left())
-                startY = int(pos.top())
-                endX = int(pos.right())
-                endY = int(pos.bottom())
-                tracked_faces.append((startX, startY, endX, endY))
-        objects = ct.update(tracked_faces, frame)
-        for (objectID, centroid) in objects.items():
-            face = trackableFaces.get(objectID, None)
+            status = "Tracking"
+            tracked_faces = ct.get_new_positions(rgb)
+
+        faces = ct.update(tracked_faces)
+        for (faceID, (centroid, box)) in faces.items():
+            # print(centroid, box)
+            face = trackableFaces.get(faceID, None)
             if face is None:
-                face = TrackableFace(objectID, centroid, face_size)
-                trackableFaces[objectID] = face
-            if totalFrames % (detection_rate*2) == 1:
+                face = TrackableFace(faceID, centroid, face_size, box)
+                trackableFaces[faceID] = face
+            else:
+                face.curr_box = box
+
+            if totalFrames % (detection_rate * 2) == 1:
                 face.save_face(frame, centroid)
-            text = f"ID {objectID}"
+
+            text = f"ID {faceID}"
             cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
@@ -107,7 +84,6 @@ def start_tracking(config):
         totalFrames += 1
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -121,5 +97,4 @@ if __name__ == '__main__':
     parser.add_argument('--detection_model', type=str,
                         default='models/ssd_model/res10_300x300_ssd_iter_140000.caffemodel')
     configuration = parser.parse_args()
-    print(configuration)
     start_tracking(configuration)
