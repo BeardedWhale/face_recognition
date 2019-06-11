@@ -5,6 +5,7 @@ import imutils
 from imutils.video import VideoStream
 
 from face_detection import FaceDetector
+from face_recognition import FaceRecognizer
 from face_tracking import TrackableFace, MultipleFaceTracker
 
 
@@ -17,21 +18,22 @@ def start_tracking(config):
     detection_rate = config.detection_rate
     face_size = config.face_size
     conf = config.detection_conf
-    vs = VideoStream(src=0).start()
+    vs = VideoStream(src=config.video_src).start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
     W = None
     H = None
 
-    totalFrames = 0
-    trackableFaces = {}
+    total_frames = 0
+    trackable_faces = {}
 
     # instantiate our centroid tracker, then initialize a list to store
     # each of our dlib correlation trackers, followed by a dictionary to
     # map each unique object ID to a TrackableFace
     ct = MultipleFaceTracker(tracker_type='correlation', max_disappeared=40, max_distance=50)
     fd = FaceDetector(config)
+    fr = FaceRecognizer(config)
 
     while True:
         frame = vs.read()
@@ -43,7 +45,7 @@ def start_tracking(config):
         status = "Waiting"
         tracked_faces = []
 
-        if totalFrames % detection_rate == 0:
+        if total_frames % detection_rate == 0:
             status = "Detecting"
             face_boxes = fd.detect(frame=frame, conf=conf)
             ct.update_trackers(rgb, face_boxes)
@@ -54,17 +56,20 @@ def start_tracking(config):
         faces = ct.update(tracked_faces)
         for (faceID, (centroid, box)) in faces.items():
             # print(centroid, box)
-            face = trackableFaces.get(faceID, None)
+            face = trackable_faces.get(faceID, None)
             if face is None:
-                face = TrackableFace(faceID, centroid, face_size, box)
-                trackableFaces[faceID] = face
+                face = TrackableFace(faceID, centroid, face_size, box, fr, frame)
+                trackable_faces[faceID] = face
             else:
                 face.curr_box = box
 
-            if totalFrames % (detection_rate * 2) == 1:
+            if face.name == 'Unknown':
+                face.authorize(rgb, centroid, fr, use_box=True)
+
+            if total_frames % (detection_rate * 2) == 1:
                 face.save_face(frame, centroid)
 
-            text = f"ID {faceID}"
+            text = f"ID {faceID}, name {face.name}:{face.prob}"
             cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
@@ -81,7 +86,7 @@ def start_tracking(config):
         # if the `q` key was pressed, break from the loop
         if key == ord("q"):
             break
-        totalFrames += 1
+        total_frames += 1
 
 
 if __name__ == '__main__':
@@ -90,11 +95,15 @@ if __name__ == '__main__':
     parser.add_argument('--tracker', choices=['centroid'], default='centroid')
     parser.add_argument('--detector', choices=['ssd'], default='ssd')
     parser.add_argument('--recognizer', choices=['facenet'], default='facenet')
-    parser.add_argument('--detection_rate', type=int, default=24)
+    parser.add_argument('--detection_rate', type=int, default=6)
     parser.add_argument('--face_size', type=int, default=160)
     parser.add_argument('--detection_conf', type=float, default=0.5)
     parser.add_argument('--prototxt', type=str, default='models/ssd_model/deploy.prototxt.txt')
     parser.add_argument('--detection_model', type=str,
                         default='models/ssd_model/res10_300x300_ssd_iter_140000.caffemodel')
+    parser.add_argument('--facenet_path', type=str, default='models/facenet/model.pb')
+    parser.add_argument('--classifier_path', type=str, default='models/facenet/lfw_classifier_KNN_7.pk')
+    parser.add_argument('--video_src', type=int, choices=[0, 1], default=0,
+                        help='0 for standard webcam, 1 for usb')
     configuration = parser.parse_args()
     start_tracking(configuration)

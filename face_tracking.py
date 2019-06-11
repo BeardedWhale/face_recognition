@@ -7,9 +7,11 @@ import dlib
 import numpy as np
 from scipy.spatial import distance as dist
 
+from face_recognition import FaceRecognizer
+
 
 class TrackableFace:
-    def __init__(self, faceID, centroid, face_size, box):
+    def __init__(self, faceID, centroid, face_size, box, face_recognizer, frame):
         """
         Creates Face object
         :param faceID:
@@ -28,6 +30,42 @@ class TrackableFace:
 
         self.saved_faces = 0
         self.face_size = face_size  # size of face to store
+        self.name = 'Unknown'
+        self.prob = 0.0
+
+    def crop_face(self, frame,centroid, use_box=False):
+
+        frame_shape = frame.shape
+        coordinates = []
+        if use_box and self.curr_box:
+            startX, startY, endX, endY = self.curr_box
+            cropped_face = frame[startY:endY, startX:endX, :]
+            print(cropped_face.shape, 'shape', self.curr_box)
+            cropped_face = cv2.resize(cropped_face, dsize=(self.face_size, self.face_size),
+                                      interpolation=cv2.INTER_CUBIC)
+        else:
+            for i in range(2):
+                assert self.face_size <= frame_shape[i]
+                diff = int(math.ceil(self.face_size / 2))
+                start = centroid[i] - diff
+                end = centroid[i] + diff
+                if start < 0:
+                    start = 0
+                    end = start + self.face_size
+                if end >= frame_shape[i]:
+                    end = frame_shape[i]
+                    start = end - self.face_size
+                coordinates.extend([start, end])
+
+            startX, endX, startY, endY = coordinates
+            cropped_face = frame[startY:endY, startX:endX, :]
+        return cropped_face
+
+    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer, use_box=False):
+        face = self.crop_face(frame, centroid, use_box)
+        self.name, self.prob = face_recognizer.recognize_face(face, 0)
+
+
 
     def save_face(self, frame, centroid):
         """
@@ -36,23 +74,8 @@ class TrackableFace:
         :param centroid: coordinates of a face center
         :return: nothing
         """
-        frame_shape = frame.shape
-        coordinates = []
-        for i in range(2):
-            assert self.face_size <= frame_shape[i]
-            diff = int(math.ceil(self.face_size / 2))
-            start = centroid[i] - diff
-            end = centroid[i] + diff
-            if start < 0:
-                start = 0
-                end = start + self.face_size
-            if end >= frame_shape[i]:
-                end = frame_shape[i]
-                start = end - self.face_size
-            coordinates.extend([start, end])
+        cropped_face = self.crop_face(frame, centroid)
 
-        startX, endX, startY, endY = coordinates
-        cropped_face = frame[startY:endY, startX:endX, :]
         cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
         self.saved_faces += 1
 
