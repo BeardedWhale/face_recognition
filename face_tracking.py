@@ -33,14 +33,15 @@ class TrackableFace:
         self.name = 'Unknown'
         self.prob = 0.0
 
-    def crop_face(self, frame,centroid, use_box=False):
+    def crop_face(self, frame, centroid, use_box=False):
 
         frame_shape = frame.shape
         coordinates = []
         if use_box and self.curr_box:
             startX, startY, endX, endY = self.curr_box
-            cropped_face = frame[startY:endY, startX:endX, :]
-            print(cropped_face.shape, 'shape', self.curr_box)
+            startX, startY = max(startX, 0), max(startY, 0)
+            side_size = max(endX - startX, endY - startY)
+            cropped_face = frame[startY:startY + side_size, startX:startX + side_size, :]
             cropped_face = cv2.resize(cropped_face, dsize=(self.face_size, self.face_size),
                                       interpolation=cv2.INTER_CUBIC)
         else:
@@ -65,8 +66,6 @@ class TrackableFace:
         face = self.crop_face(frame, centroid, use_box)
         self.name, self.prob = face_recognizer.recognize_face(face, 0)
 
-
-
     def save_face(self, frame, centroid):
         """
         Saves face to .jpg file to be used for face authentification
@@ -74,7 +73,7 @@ class TrackableFace:
         :param centroid: coordinates of a face center
         :return: nothing
         """
-        cropped_face = self.crop_face(frame, centroid)
+        cropped_face = self.crop_face(frame, centroid, use_box=True)
 
         cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
         self.saved_faces += 1

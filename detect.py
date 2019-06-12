@@ -3,6 +3,7 @@ import argparse
 import cv2
 import imutils
 from imutils.video import VideoStream
+from termcolor import colored
 
 from face_detection import FaceDetector
 from face_recognition import FaceRecognizer
@@ -55,7 +56,6 @@ def start_tracking(config):
 
         faces = ct.update(tracked_faces)
         for (faceID, (centroid, box)) in faces.items():
-            # print(centroid, box)
             face = trackable_faces.get(faceID, None)
             if face is None:
                 face = TrackableFace(faceID, centroid, face_size, box, fr, frame)
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--tracker', choices=['centroid'], default='centroid')
-    parser.add_argument('--detector', choices=['ssd'], default='ssd')
+    parser.add_argument('--detector', choices=['ssd', 'mtcnn'], default='ssd')
     parser.add_argument('--recognizer', choices=['facenet'], default='facenet')
     parser.add_argument('--detection_rate', type=int, default=6)
     parser.add_argument('--face_size', type=int, default=160)
@@ -106,4 +106,10 @@ if __name__ == '__main__':
     parser.add_argument('--video_src', type=int, choices=[0, 1], default=0,
                         help='0 for standard webcam, 1 for usb')
     configuration = parser.parse_args()
+
+    print('*' * 30)
+    print(colored('FACE DETECTION MODEL:', 'blue'), configuration.detector, '\n')
+    print(colored('FACE TRACKING MODEL:', 'blue'), configuration.tracker, '\n')
+    print(colored('FACE RECOGNITION MODEL:', 'blue'), configuration.recognizer, '\n')
+    print('*' * 30)
     start_tracking(configuration)
