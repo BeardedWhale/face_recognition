@@ -34,12 +34,13 @@ def load_classifier(classifier_filename):
 
 class Facenet:
 
-    def __init__(self):
+    def __init__(self, classifier_type):
         self.facenet_path = 'models/facenet/model.pb'
+        self.classifier_path = f'models/facenet/face_classifier_{classifier_type}.pk'
+        self.classifier_type = classifier_type
+        self.svm_path = 'models/facenet/svm.pk'  # for novelity check
         self.image_size = 160
-        self.classifier, self.class_names = load_classifier('models/facenet/lfw_classifier_KNN_super.pk')
-        if not self.classifier:
-            self.train_classifier('', '', 'KNN')
+        self.classifier, self.class_names = load_classifier('models/facenet/face_classifier_KNN.pk')
         self.graph = tf.Graph()
         with self.graph.as_default():
             with tf.Session(graph=self.graph) as sess:
@@ -58,13 +59,14 @@ class Facenet:
         return emb_array
 
     def recognize_face(self, img, conf=0.6):
+        if not self.classifier:
+            print(colored('You need to pretrain face classifier!', 'red'))
+            return 'Unkown', 0.0
         with self.graph.as_default():
             with tf.Session(graph=self.graph) as sess:
                 # Get facenet embeddings
                 emb_array = np.zeros((1, self.embedding_size))
-                print(img.shape)
                 image = np.array([preprocess_image(img, False, False, 160)])
-                print(image.shape)
                 feed_dict = {self.images_placeholder: image, self.phase_train_placeholder: False}
                 emb_array[0, :] = sess.run(self.embeddings, feed_dict=feed_dict)
 
@@ -74,15 +76,13 @@ class Facenet:
                 predictions = self.classifier.predict_proba(emb_array)
                 best_class_indices = np.argmax(predictions, axis=1)
                 best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
-                for i in range(len(best_class_indices)):
-                    print('%4d  %s: %.3f' % (i, self.class_names[best_class_indices[i]], best_class_probabilities[i]))
                 label = self.class_names[best_class_indices[i]]
                 prob = best_class_probabilities[i]
         if prob < conf:
             label = 'Unknown'
         return label, prob
 
-    def train_classifier(self, train_data_path, classifier_path, classifier_type, batch_size=32):
+    def train_classifier(self, train_data_path, batch_size=32):
         """
         Trains classifier for embeddings
         :param train_data_path: path to folders with train data
@@ -109,17 +109,19 @@ class Facenet:
                     feed_dict = {self.images_placeholder: images, self.phase_train_placeholder: False}
                     emb_array[start_index:end_index, :] = sess.run(self.embeddings, feed_dict=feed_dict)
 
-        classifier_filename_exp = os.path.expanduser(classifier_path)
-        if classifier_type == 'KNN':
+        classifier_filename_exp = os.path.expanduser(self.classifier_path)
+        if self.classifier_type == 'KNN':
             model = KNN(n_neighbors=k)
         else:
             model = SVC(kernel='linear', probability=True)
+        # Training svm for novelity detection
         clf = svm.OneClassSVM(nu=0.1, kernel="rbf", gamma=0.1)
         clf.fit(emb_array)
+        # Training classification model
         model.fit(emb_array, labels)
         class_names = list(classes.values())
         with open(classifier_filename_exp, 'wb') as outfile:
             pickle.dump((model, class_names), outfile)
         print('Saved classifier model to file "%s"' % classifier_filename_exp)
-        with open('/Users/elizavetabatanina/PycharmProjects/FaceNet/facenet/models/svm.pk', 'wb') as outfile:
+        with open(self.svm_path, 'wb') as outfile:
             pickle.dump((clf), outfile)
