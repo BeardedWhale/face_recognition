@@ -12,7 +12,6 @@ class FaceDetector:
     def define_detection_model(self, config):
         """
         Gets face detector object
-        TODO add MTCNN
         :param detector_name:
         :return:
         """

@@ -1,4 +1,3 @@
-import math
 import os
 from collections import OrderedDict
 
@@ -8,10 +7,13 @@ import numpy as np
 from scipy.spatial import distance as dist
 
 from face_recognition import FaceRecognizer
+from image_utils import crop_face
 
 
 class TrackableFace:
-    def __init__(self, faceID, centroid, face_size, box, face_recognizer, frame):
+    MAX_FAILED = 10  # number of maximum failed recognitions before we stop recognizing this face
+
+    def __init__(self, faceID, centroid, face_size, box):
         """
         Creates Face object
         :param faceID:
@@ -32,51 +34,32 @@ class TrackableFace:
         self.face_size = face_size  # size of face to store
         self.name = 'Unknown'
         self.prob = 0.0
+        self.failed_detections = 0
+        self.labels = []
 
-    def crop_face(self, frame, centroid, use_box=False):
-
-        frame_shape = frame.shape
-        coordinates = []
-        if use_box and self.curr_box:
-            startX, startY, endX, endY = self.curr_box
-            startX, startY = max(startX, 0), max(startY, 0)
-            side_size = max(endX - startX, endY - startY)
-            cropped_face = frame[startY:startY + side_size, startX:startX + side_size, :]
-            cropped_face = cv2.resize(cropped_face, dsize=(self.face_size, self.face_size),
-                                      interpolation=cv2.INTER_CUBIC)
-        else:
-            for i in range(2):
-                assert self.face_size <= frame_shape[i]
-                diff = int(math.ceil(self.face_size / 2))
-                start = centroid[i] - diff
-                end = centroid[i] + diff
-                if start < 0:
-                    start = 0
-                    end = start + self.face_size
-                if end >= frame_shape[i]:
-                    end = frame_shape[i]
-                    start = end - self.face_size
-                coordinates.extend([start, end])
-
-            startX, endX, startY, endY = coordinates
-            cropped_face = frame[startY:endY, startX:endX, :]
-        return cropped_face
-
-    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer, use_box=False):
-        face = self.crop_face(frame, centroid, use_box)
+    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer, use_box=True):
+        if self.failed_detections >= TrackableFace.MAX_FAILED:
+            return
+        face = crop_face(frame, centroid=centroid, use_box=use_box, box=self.curr_box)
+        print(face.shape, 'face')
         self.name, self.prob = face_recognizer.recognize_face(face, 0)
+        if self.name == 'Unkown':
+            self.failed_detections += 1
 
-    def save_face(self, frame, centroid):
+    def save_face(self, frame, centroid, face_detector):
         """
         Saves face to .jpg file to be used for face authentification
         :param frame: current video frame
         :param centroid: coordinates of a face center
         :return: nothing
         """
-        cropped_face = self.crop_face(frame, centroid, use_box=True)
-
-        cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
-        self.saved_faces += 1
+        cropped_face = crop_face(frame, centroid=centroid, use_box=True)
+        faces = face_detector.detect(frame=frame, conf=0.9)
+        if faces:
+            cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
+            self.saved_faces += 1
+        else:
+            print('None')
 
 
 class MultipleFaceTracker:
@@ -120,7 +103,6 @@ class MultipleFaceTracker:
         """
         Updates faces position according to trackers by matching newly detected faces
         and old tracked ones. Faces are matched by distance between old and new centroids
-        # TODO add IoU metric ?
         :param box_coordinates: box coordinates of detected faces
         :return: dict {faceID: (centroid coordinates, box_coordinates)}
         """
