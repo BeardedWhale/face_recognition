@@ -124,7 +124,6 @@ def _get_triplet_mask(labels):
 
 
 def batch_all_triplet_loss(labels, embeddings, squared=False):
-    global margin
     """Build the triplet loss over a batch of embeddings.
 
     We generate all the valid triplets and average the loss over the positive ones.
@@ -177,7 +176,6 @@ def batch_all_triplet_loss(labels, embeddings, squared=False):
 
 
 def batch_hard_triplet_loss(labels, embeddings, margin=0.3, squared=False):
-    print(labels.shape, 'kek')
     """Build the triplet loss over a batch of embeddings.
 
     For each anchor, we get the hardest positive and hardest negative to form a triplet.
