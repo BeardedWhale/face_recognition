@@ -6,8 +6,8 @@ import dlib
 import numpy as np
 from scipy.spatial import distance as dist
 
-from face_recognition import FaceRecognizer
-from image_utils import crop_face
+from face_authentication import FaceRecognizer
+from utils.image_utils import align_faces
 
 
 class TrackableFace:
@@ -37,12 +37,14 @@ class TrackableFace:
         self.failed_detections = 0
         self.labels = []
 
-    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer, use_box=True):
+    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
         if self.failed_detections >= TrackableFace.MAX_FAILED:
             return
-        face = crop_face(frame, centroid=centroid, use_box=use_box, box=self.curr_box)
-        print(face.shape, 'face')
-        self.name, self.prob = face_recognizer.recognize_face(face, 0)
+        face, success = align_faces(frame)  # couldn't align face (quality of face is too bad)
+        if not success:
+            self.name, self.prob = 'Unkown', 0.0
+        else:
+            self.name, self.prob = face_recognizer.recognize_face(frame, 0, box=self.curr_box)
         if self.name == 'Unkown':
             self.failed_detections += 1
 
@@ -53,10 +55,9 @@ class TrackableFace:
         :param centroid: coordinates of a face center
         :return: nothing
         """
-        cropped_face = crop_face(frame, centroid=centroid, use_box=True)
-        faces = face_detector.detect(frame=frame, conf=0.9)
-        if faces:
-            cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
+        face, success = align_faces(frame, box=self.curr_box)
+        if success == 1:
+            cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', face)
             self.saved_faces += 1
         else:
             print('None')
