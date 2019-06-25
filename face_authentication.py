@@ -14,7 +14,7 @@ class FaceRecognizer:
     def __init__(self, config):
         self.name = config.recognizer
         self.recognize_face = self.define_recognition_model(config)
-        self.update_model = self.define_update_model()
+        # self.update_model = self.define_update_model()
         self.face_features_base = {}
 
     def define_recognition_model(self, config):

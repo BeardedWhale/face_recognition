@@ -40,11 +40,13 @@ class TrackableFace:
     def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
         if self.failed_detections >= TrackableFace.MAX_FAILED:
             return
-        face, success = align_faces(frame)  # couldn't align face (quality of face is too bad)
+        face, success = align_faces(frame, box=self.curr_box)  # couldn't align face (quality of face is too bad)
+        print(face.shape)
         if not success:
+            print('Cannot align face')
             self.name, self.prob = 'Unkown', 0.0
         else:
-            self.name, self.prob = face_recognizer.recognize_face(frame, 0, box=self.curr_box)
+            self.name, self.prob = face_recognizer.recognize_face(face, 0.6)
         if self.name == 'Unkown':
             self.failed_detections += 1
 

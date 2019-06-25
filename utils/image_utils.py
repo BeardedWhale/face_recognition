@@ -46,7 +46,6 @@ def flip(image, random_flip):
 def preprocess_image(img, do_random_crop, do_random_flip, image_size, do_prewhiten=True, do_quantize=False):
     if do_prewhiten:
         img = prewhiten(img)
-        # img =  tf.image.per_image_standardization(img)
     if do_quantize:
         img = quantize(img)
     img = crop(img, do_random_crop, image_size)
@@ -127,6 +126,28 @@ def get_image_paths_and_labels(data_path):
     return classes, labels, paths
 
 
+def get_faces_paths_and_labels(data_path, nrof_train_images):
+    data_path = os.path.expanduser(data_path)
+    inner_folders = os.listdir(data_path)
+    trian_labels = []
+    test_labels = []
+    classes = OrderedDict()
+    train_paths = []
+    test_paths = []
+    inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
+    for i, folder in enumerate(inner_folders):
+        class_name = folder.replace(data_path, '')
+        classes[i] = class_name
+        images = os.listdir(os.path.join(data_path, folder))
+        images_paths = [os.path.join(data_path, folder, image) for image in images if '.DS' not in image]
+        train_images, test_images = images_paths[:nrof_train_images], images_paths[nrof_train_images:]
+        train_paths.extend(train_images)
+        trian_labels.extend([i] * len(train_images))
+        test_paths.extend(test_images)
+        test_labels.extend([i] * len(test_images))
+    return classes, trian_labels, train_paths, test_labels, test_paths
+
+
 def load_images(image_paths, image_size, quantize=False, align=False):
     nrof_samples = len(image_paths)
     images = []
@@ -155,7 +176,6 @@ def align_faces(img, box=(0, 0, 0, 0)):
     for i, detection in enumerate(dets):
         startX, startY, endX, endY = detection.left(), detection.top(), detection.right(), detection.bottom()
         curr_iou = iou(box, (startX, startY, endX, endY))
-        print(detection, box, curr_iou)
         if curr_iou >= max_iou:
             max_iou = curr_iou
             target_face_index = i
