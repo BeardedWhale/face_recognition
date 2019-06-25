@@ -9,12 +9,15 @@ import face_recognition
 import numpy as np
 from termcolor import colored
 from tqdm import tqdm
+import shutil
+
 
 
 class FaceRecognizer:
     def __init__(self, config):
         self.name = config.recognizer
         self.recognize_faces = self.define_recognition_model(config)
+        self.update_face_base = self.model.update_model
         # self.update_model = self.define_update_model()
         self.face_features_base = {}
 
@@ -32,6 +35,7 @@ class FaceRecognizer:
             from models.facenet.facenet import Facenet
             self.model = Facenet(config.classifier_type, True)
             return partial(self.model.recognize_faces, )
+
 
     def validate_face(self, faces: List, confidence=0.6):
         """
@@ -52,4 +56,14 @@ class FaceRecognizer:
             return label, conf
         else:
             return 'Unkown', 0.0
+
+    def register_new_face(self, face):
+        print('Seems I do not know this person')
+        name = input('Enter new user name: ')
+        face.name, face.prob = name, 1.0
+        # move folder to new destination
+        shutil.move(os.path.join('trackable_faces', str(face.faceID)),
+                    os.path.join('face_base', face.name))
+        self.update_face_base(name)
+
 

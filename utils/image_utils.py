@@ -1,3 +1,4 @@
+import json
 import math
 import os
 from collections import OrderedDict
@@ -125,26 +126,47 @@ def get_image_paths_and_labels(data_path):
         labels.extend([i] * len(images_paths))
     return classes, labels, paths
 
+def get_images_paths(folder, nrof_train_images):
+    """
+    Loads all images from given folder
+    :param folder:
+    :param nrof_train_images:
+    :return:
+    """
+    images = os.listdir(folder)
+    images_paths = [os.path.join(folder, image) for image in images if '.DS' not in image]
+    train_images, test_images = images_paths[:nrof_train_images], images_paths[nrof_train_images:]
+    return train_images, test_images
+
 
 def get_faces_paths_and_labels(data_path, nrof_train_images):
+    """
+    Loads faces dataset, ignores folders that are not in config.json
+    :param data_path:
+    :param nrof_train_images:
+    :return:
+    """
     data_path = os.path.expanduser(data_path)
     inner_folders = os.listdir(data_path)
     trian_labels = []
     test_labels = []
-    classes = OrderedDict()
+    with open(os.path.join(data_path, 'config.json')) as file:
+        classes = json.loads(file.read())
+        print('classes', classes)
     train_paths = []
     test_paths = []
     inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
     for i, folder in enumerate(inner_folders):
         class_name = folder.replace(data_path, '')
-        classes[i] = class_name
-        images = os.listdir(os.path.join(data_path, folder))
-        images_paths = [os.path.join(data_path, folder, image) for image in images if '.DS' not in image]
-        train_images, test_images = images_paths[:nrof_train_images], images_paths[nrof_train_images:]
+        if class_name not in classes:
+            continue
+        label = classes.index(class_name)
+        curr_folder = os.path.join(data_path, folder)
+        train_images, test_images = get_images_paths(curr_folder, nrof_train_images)
         train_paths.extend(train_images)
-        trian_labels.extend([i] * len(train_images))
+        trian_labels.extend([label] * len(train_images))
         test_paths.extend(test_images)
-        test_labels.extend([i] * len(test_images))
+        test_labels.extend([label] * len(test_images))
     return classes, trian_labels, train_paths, test_labels, test_paths
 
 

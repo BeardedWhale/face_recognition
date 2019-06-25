@@ -21,7 +21,7 @@ def start_tracking(config):
     face_size = config.face_size
     conf = config.detection_conf
     # vs = VideoStream(src=config.video_src).start()
-    vs = FileVideoStream(path='test_videos/frank.mp4').start()
+    vs = FileVideoStream(path='test_videos/keanu.mp4').start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
@@ -70,7 +70,7 @@ def start_tracking(config):
             if face.name == 'Unknown':
                 face.authorize(rgb, centroid, fr)
 
-            if total_frames % (detection_rate * 2) == 1:
+            if total_frames % (detection_rate) == 1:
                 face.save_face(frame)
 
 

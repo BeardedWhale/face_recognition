@@ -7,7 +7,7 @@ from utils.image_utils import align_faces
 
 
 class TrackableFace:
-    MAX_FAILED = 10  # number of maximum failed recognitions before we stop recognizing this face
+    MAX_FAILED = 5  # number of maximum failed recognitions before we stop recognizing this face
     MIN_N_FACES = 4  # minimum number of stored aligned faces to recognize person
 
     def __init__(self, faceID, centroid, face_size, box):
@@ -37,6 +37,8 @@ class TrackableFace:
     def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
 
         if self.failed_detections >= TrackableFace.MAX_FAILED:
+            face_recognizer.register_new_face(self)
+
             return None
 
         if len(self.faces) < TrackableFace.MIN_N_FACES:  # not ready for authentication
