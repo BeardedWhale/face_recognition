@@ -33,7 +33,7 @@ from termcolor import colored
 from tqdm import tqdm
 
 from models.facenet.triplet_loss import batch_hard_triplet_loss
-from utils.image_utils import preprocess_image, load_images, get_faces_paths_and_labels, align_faces
+from utils.image_utils import preprocess_image, load_images, get_faces_paths_and_labels
 
 
 def load_facenet_model(facenet_path, input_map=None):
@@ -118,33 +118,42 @@ class Facenet:
                 emb_array = sess.run(self.embeddings, feed_dict=feed_dict)
         return emb_array
 
-    def recognize_face(self, img, conf=0.7, box=(0, 0, 0, 0)):
+    def recognize_faces(self, faces_img, conf=0.7):
+        """
+        Classifies given face image according to known faces' names.
+        1. Take Facenet embedding
+        2. Transforms Facenet embedding using emb_model trained with triplet loss
+        for better performance on local base faces
+        3. Classifies image using simple classifier
+        :param faces_img: np.array. Image should be in rgb, cropped and aligned according to detected face
+        :param conf: confidence bound to drop inkown faces
+        :param box: face box in order to align not aligned face
+        :return: list of faces labels, list of probabilities
+        """
         if not self.classifier:
             print(colored('You need to pretrain face classifier!', 'red'))
             return 'Unkown', 0.0
 
-        if box != (0, 0, 0, 0):
-            img, success = align_faces(img, box=box)
-            if not success:
-                return 'Unkown', 0.0
-        image = np.array([preprocess_image(img, False, False, 160, do_quantize=self.tflite)])
+        faces_img = np.array([preprocess_image(img, False, False, 160, do_quantize=self.tflite) for img in faces_img])
+        facenet_embedding = np.zeros((len(faces_img), self.facenet_embedding_size))
+        # Get facenet embeddings
         if self.tflite:
-            emb_array = self.get_embedding_tflite(image)
+            for i in range(len(faces_img)):
+                facenet_embedding[i, :] = self.get_embedding_tflite([faces_img[i]])
         else:
-            # Get facenet embeddings
-            emb_array = self.get_embedding(image)
+            facenet_embedding = self.get_embedding(faces_img)
 
+        # Get new embedding
+        embedding = self.emb_model.predict(facenet_embedding)
         # Classify
-        print('emb_array', emb_array.shape)
-        embedding = self.emb_model.predict(emb_array)
         predictions = self.classifier.predict_proba(embedding)
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
-        label = self.class_names[best_class_indices[0]]
-        prob = best_class_probabilities[0]
-        if prob < conf:
-            label = 'Unknown'
-        return label, prob
+        labels = [self.class_names[index] for index in best_class_indices]
+        for i in range(len(labels)):
+            if best_class_probabilities[i] < conf:
+                labels[i] = 'Unknown'
+        return labels, best_class_probabilities
 
     def train_classifier(self, train_path, **kwargs):
         """

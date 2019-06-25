@@ -2,12 +2,13 @@ import argparse
 
 import cv2
 import imutils
-from imutils.video import VideoStream
+from imutils.video import VideoStream, FileVideoStream
 from termcolor import colored
 
 from face_authentication import FaceRecognizer
 from face_detection import FaceDetector
-from face_tracking import TrackableFace, MultipleFaceTracker
+from face_tracking import MultipleFaceTracker
+from face import TrackableFace
 
 
 def start_tracking(config):
@@ -19,8 +20,8 @@ def start_tracking(config):
     detection_rate = config.detection_rate
     face_size = config.face_size
     conf = config.detection_conf
-    vs = VideoStream(src=config.video_src).start()
-    # vs = FileVideoStream(path='test_videos/sasha.mov').start()
+    # vs = VideoStream(src=config.video_src).start()
+    vs = FileVideoStream(path='test_videos/frank.mp4').start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
@@ -70,7 +71,8 @@ def start_tracking(config):
                 face.authorize(rgb, centroid, fr)
 
             if total_frames % (detection_rate * 2) == 1:
-                face.save_face(frame, centroid, fd)
+                face.save_face(frame)
+
 
             text = f"ID {faceID}, name {face.name}:{face.prob}"
             faces_info.append({'text': text, 'centroid': centroid})

@@ -10,61 +10,6 @@ from face_authentication import FaceRecognizer
 from utils.image_utils import align_faces
 
 
-class TrackableFace:
-    MAX_FAILED = 10  # number of maximum failed recognitions before we stop recognizing this face
-
-    def __init__(self, faceID, centroid, face_size, box):
-        """
-        Creates Face object
-        :param faceID:
-        :param centroid:
-        :param face_size:
-        :param box:
-        """
-        # store the object ID, then initialize a list of centroids
-        # using the current centroid
-        self.faceID = faceID
-        self.centroids = [centroid]
-        self.curr_box = box
-        self.photo_path = f'trackable_faces/{faceID}'
-        if not os.path.exists(self.photo_path):
-            os.mkdir(self.photo_path)
-
-        self.saved_faces = 0
-        self.face_size = face_size  # size of face to store
-        self.name = 'Unknown'
-        self.prob = 0.0
-        self.failed_detections = 0
-        self.labels = []
-
-    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
-        if self.failed_detections >= TrackableFace.MAX_FAILED:
-            return
-        face, success = align_faces(frame, box=self.curr_box)  # couldn't align face (quality of face is too bad)
-        print(face.shape)
-        if not success:
-            print('Cannot align face')
-            self.name, self.prob = 'Unkown', 0.0
-        else:
-            self.name, self.prob = face_recognizer.recognize_face(face, 0.6)
-        if self.name == 'Unkown':
-            self.failed_detections += 1
-
-    def save_face(self, frame, centroid, face_detector):
-        """
-        Saves face to .jpg file to be used for face authentification
-        :param frame: current video frame
-        :param centroid: coordinates of a face center
-        :return: nothing
-        """
-        face, success = align_faces(frame, box=self.curr_box)
-        if success == 1:
-            cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', face)
-            self.saved_faces += 1
-        else:
-            print('None')
-
-
 class MultipleFaceTracker:
     """
     This class if used to track multiple faces
