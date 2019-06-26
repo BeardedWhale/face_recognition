@@ -20,7 +20,6 @@ class FaceRecognizer:
         :param confidence: confidence rate
         :return: name of a person
         """
-        print('Validating')
         face_labels = Counter()
         start = time.time()
         faces, confidences = self.recognize_faces(faces, conf=0.6)

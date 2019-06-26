@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import cv2
 import imutils
@@ -20,6 +21,7 @@ def start_tracking(config):
     detection_rate = config.detection_rate
     face_size = config.face_size
     conf = config.detection_conf
+    mode = config.mode
     # vs = VideoStream(src=config.video_src).start()
     vs = FileVideoStream(path='test_videos/keanu.mp4').start()
 
@@ -36,8 +38,10 @@ def start_tracking(config):
     # map each unique object ID to a TrackableFace
     ct = MultipleFaceTracker(tracker_type='correlation', max_disappeared=40, max_distance=50)
     fd = FaceDetector(config)
-    if config.recognizer == 'facenet':
-        fr = Facenet(classifier_type='KNN', tflite=True)
+    fr = None
+    if mode == 2:
+        if config.recognizer == 'facenet':
+            fr = Facenet(classifier_type='KNN', tflite=True)
     print('Initialized models')
 
     while True:
@@ -68,10 +72,10 @@ def start_tracking(config):
             else:
                 face.curr_box = box
 
-            if face.name == 'Unknown':
-                face.authorize(rgb, centroid, fr)
+            if face.name == 'Unknown' and mode == 2:
+                face.authorize(rgb, fr)
 
-            if total_frames % (detection_rate) == 1:
+            if total_frames % (detection_rate) == 1 and mode > 0:
                 face.save_face(frame)
 
             text = f"ID {faceID}, name {face.name}:{face.prob}"
@@ -99,11 +103,18 @@ def start_tracking(config):
 
 
 if __name__ == '__main__':
+    if not os.path.exists('trackable_faces'):
+        os.mkdir('trackable_faces')
+    if not os.path.exists('face_base'):
+        os.mkdir('face_base')
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--tracker', choices=['centroid'], default='centroid')
     parser.add_argument('--detector', choices=['ssd', 'mtcnn'], default='ssd')
     parser.add_argument('--recognizer', choices=['facenet'], default='facenet')
+    parser.add_argument('--mode', choices=[0, 1, 2], default=2,
+                        help='Modes of detection. 0 - detect&track faces, 1 - same as 2 + save faces,'
+                             ' 2 - detect&track&register')
     parser.add_argument('--detection_rate', type=int, default=6)
     parser.add_argument('--face_size', type=int, default=160)
     parser.add_argument('--detection_conf', type=float, default=0.7)

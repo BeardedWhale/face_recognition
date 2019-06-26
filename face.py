@@ -12,11 +12,11 @@ class TrackableFace:
 
     def __init__(self, faceID, centroid, face_size, box):
         """
-        Creates Face object
-        :param faceID:
-        :param centroid:
-        :param face_size:
-        :param box:
+        Creates face object
+        :param faceID: id of face in tracker
+        :param centroid: centroid of face
+        :param face_size: size
+        :param box: face coordinates
         """
         # store the object ID, then initialize a list of centroids
         # using the current centroid
@@ -34,7 +34,7 @@ class TrackableFace:
         self.failed_detections = 0
         self.faces = []
 
-    def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
+    def authorize(self, frame, face_recognizer: FaceRecognizer):
 
         if self.failed_detections >= TrackableFace.MAX_FAILED:
             name = face_recognizer.register_new_face(self.faces)
@@ -42,11 +42,9 @@ class TrackableFace:
             return None
 
         if len(self.faces) < self.min_n_faces:  # not ready for recognition
-            # frame = to_rgb(frame)
             face, success = align_faces(frame, box=self.curr_box)
             if success == 1:  # if aligned face is ok
                 self.faces.append(face)
-            print('Not ready')
             return None
 
         label, conf = face_recognizer.validate_face(self.faces, confidence=0.6)

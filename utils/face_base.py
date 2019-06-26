@@ -150,7 +150,6 @@ class FaceBase:
         :return:
         """
         if not os.path.exists(os.path.join(self.path, 'base.json')):
-            print('Creating new base')
             self.train_labels, self.train_images, self.train_embeddings, \
             self.test_labels, self.test_images, self.test_embeddings = self.load_base_from_folder()
             self.align_faces = kwargs.get('align_faces', False)
@@ -161,7 +160,6 @@ class FaceBase:
             self.save()
         else:
             # Load all from pickle file
-            print('Loading facebase from file')
             with open(os.path.join(self.path, 'base.json'), 'rb') as file:
                 face_base = pickle.load(file)
             params = face_base['params']
@@ -173,7 +171,6 @@ class FaceBase:
             faces = face_base['faces']
 
             self.classes = faces['classes']
-            print(f'CLASSES {self.classes}')
             self.train_labels, self.train_images, self.train_embeddings, self.test_labels, \
             self.test_images, self.test_embeddings = faces['train_labels'], faces['train_images'],\
                                                      faces['train_embeddings'], faces['test_labels'],\
@@ -182,7 +179,7 @@ class FaceBase:
     def save(self):
         """
         Saves face to pickle file
-        :return:
+        :return: nothing
         """
         print('Saving face base...')
         params = {'align_faces': self.align_faces, 'image_size': self.image_size,
@@ -191,6 +188,4 @@ class FaceBase:
                  'train_embeddings': self.train_embeddings, 'test_labels': self.test_labels, 'test_images': self.test_images,
                  'test_embeddings': self.test_embeddings}
         with open(os.path.join(self.path, 'base.json'), 'wb+') as file:
-            print('saving base')
             pickle.dump({'params': params, 'faces': faces}, file)
-        print('Done')

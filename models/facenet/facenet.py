@@ -172,7 +172,6 @@ class Facenet(FaceRecognizer):
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         names = [self.class_names[index] for index in best_class_indices]
-        print(names)
         for i in range(len(names)):
             if best_class_probabilities[i] < conf:
                 names[i] = 'Unknown'
