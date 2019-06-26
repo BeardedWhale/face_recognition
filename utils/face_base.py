@@ -2,11 +2,11 @@ import json
 import os
 import time
 from collections import OrderedDict
-
+import cv2
 import numpy as np
 from tqdm import tqdm
 
-from utils.image_utils import get_faces_paths_and_labels, load_images, get_images_paths, preprocess_image
+from utils.image_utils import get_faces_paths_and_labels, load_images, get_images_paths, preprocess_image, to_rgb
 
 import pickle
 class FaceBase:
@@ -39,8 +39,6 @@ class FaceBase:
         """
         self.path = data_path
         self.classes = []
-        # with open(os.path.join(data_path, 'base.json')) as file:
-        #     self.classes = json.loads(file.read())
         if get_embedding:
             self.get_embedding = get_embedding
         else:
@@ -52,8 +50,7 @@ class FaceBase:
         self.quantize = kwargs.get('quantize', False)
         self.nrof_train_images = kwargs.get('nrof_train_images')
         start = time.time()
-        self.train_labels, self.train_images, self.train_embeddings, self.test_labels, \
-        self.test_images, self.test_embeddings = self.init_face_base(**kwargs)
+        self.init_face_base(**kwargs)
         print(f'Loading took: {time.time() - start}')
 
     def load_base_from_folder(self):
@@ -61,20 +58,23 @@ class FaceBase:
         Loads dataset
         :return:
         """
-        print(f'Loading face base from {self.data_path} folder')
-        print(f'Number of classes: {len(self.classes)}')
+        print(f'Loading face base from {self.path} folder')
         data_path = os.path.expanduser(self.path)
         inner_folders = os.listdir(self.path)
         inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
+        if len(inner_folders) == 0:
+            raise Exception(f'Face base folder {data_path} doesn\'t contain any subfolders.\n'
+                            f'Check base structure in documentation.')
+
         classes = OrderedDict()
         for i, folder in enumerate(inner_folders):
             class_name = folder.replace(data_path, '')
             classes[i] = class_name
         print(classes)
-        self.classes = ["fancy_boy", "albert", "sasha", "frank", "ruslan", "girl", "katya", "liza", "yan"]
         train_labels, train_paths, test_labels, test_paths = \
             get_faces_paths_and_labels(self.path, self.classes, self.nrof_train_images)
 
+        print(f'Number of classes: {len(self.classes)}')
         print(f'Number of train images: {len(train_paths)}')
         print(f'Number of test images: {len(test_paths)}')
         print('Calculating features for images...')
@@ -98,7 +98,7 @@ class FaceBase:
     def update(self, faces, name) -> bool:
         """
         Updates base with new name in folder
-        Folder self.data_path should already contain subfolder face_name
+        Folder self.path should already contain subfolder face_name
         with face images
         :param faces: list of cropped and aligned rgb images
         :param name: name of a face, should be unique
@@ -107,6 +107,13 @@ class FaceBase:
         start = time.time()
         class_label = len(self.classes)
         self.classes.append(name)
+        data_path_exp = os.path.expanduser(self.path)
+        new_dir = os.path.join(data_path_exp, name)
+        os.mkdir(new_dir)
+        for i, face in enumerate(faces):
+            face = to_rgb(face)
+            cv2.imwrite(os.path.join(new_dir, f'{i}.jpg'), face)
+
         faces = [preprocess_image(img, do_random_crop=False, do_random_flip=False,
                                image_size=self.image_size, do_quantize=self.quantize) for img in faces]
         train_images = faces[:self.nrof_train_images]
@@ -115,20 +122,25 @@ class FaceBase:
         test_len = len(test_images)
         nrof_images = len(faces)
         embeddings = []
+        print(len(faces), 'faces')
         if self.get_embedding is not None:
             for i in tqdm(range(nrof_images), total=nrof_images):
-                embeddings.append(self.get_embedding(faces[i])[0])
+                embeddings.append(self.get_embedding([faces[i]])[0])
         embeddings = np.array(embeddings)
         self.train_embeddings = np.concatenate((self.train_embeddings, embeddings[:train_len]), axis=0)
         self.test_embeddings = np.concatenate((self.test_embeddings, embeddings[train_len:]), axis=0)
-        self.train_images.extend(train_images)
-        self.test_images.extend(test_images)
+        self.train_images = np.concatenate((self.train_images, train_images), axis=0)
+        if test_images:
+            self.test_images = np.concatenate((self.test_images, test_images), axis=0)
+        # self.train_images.extend(train_images)
+        # self.test_images.extend(test_images)
         self.train_labels.extend([class_label] * train_len)
         self.test_labels.extend([class_label] * test_len)
         if self.get_embedding is not None:
             assert len(self.train_embeddings) == len(self.train_labels)
             assert len(self.test_embeddings) == len(self.test_labels)
         print(f'Updating face base took {time.time() - start}')
+        self.save()
         return True
 
 
@@ -139,25 +151,14 @@ class FaceBase:
         """
         if not os.path.exists(os.path.join(self.path, 'base.json')):
             print('Creating new base')
-            train_labels, train_images, train_embeddings, \
-            test_labels, test_images, test_embeddings = self.load_base_from_folder()
+            self.train_labels, self.train_images, self.train_embeddings, \
+            self.test_labels, self.test_images, self.test_embeddings = self.load_base_from_folder()
             self.align_faces = kwargs.get('align_faces', False)
             self.image_size = kwargs.get('image_size', 160)
             self.quantize = kwargs.get('quantize', False)
             self.nrof_train_images = kwargs.get('nrof_train_images')
 
-            params = {'align_faces': self.align_faces, 'image_size':self.image_size,
-                      'quantize': self.quantize, 'nrof_train_images': self.nrof_train_images}
-            faces = {'classes': self.classes, 'train_labels': train_labels, 'train_images': train_images,
-                    'train_embeddings': train_embeddings, 'test_labels': test_labels, 'test_images': test_images,
-                    'test_embeddings': test_embeddings}
-            with open(os.path.join(self.path, 'base.json'), 'wb+') as file:
-                print('saving base')
-                pickle.dump({'params':params, 'faces': faces}, file)
-
-            return train_labels, train_images, train_embeddings,\
-                   test_labels, test_images, test_embeddings
-
+            self.save()
         else:
             # Load all from pickle file
             print('Loading facebase from file')
@@ -170,6 +171,26 @@ class FaceBase:
             self.nrof_train_images = params.get('nrof_train_images')
 
             faces = face_base['faces']
+
             self.classes = faces['classes']
-            return faces['train_labels'], faces['train_images'], faces['train_embeddings'],\
-                   faces['test_labels'], faces['test_images'], faces['test_embeddings']
+            print(f'CLASSES {self.classes}')
+            self.train_labels, self.train_images, self.train_embeddings, self.test_labels, \
+            self.test_images, self.test_embeddings = faces['train_labels'], faces['train_images'],\
+                                                     faces['train_embeddings'], faces['test_labels'],\
+                                                     faces['test_images'], faces['test_embeddings']
+
+    def save(self):
+        """
+        Saves face to pickle file
+        :return:
+        """
+        print('Saving face base...')
+        params = {'align_faces': self.align_faces, 'image_size': self.image_size,
+                  'quantize': self.quantize, 'nrof_train_images': self.nrof_train_images}
+        faces = {'classes': self.classes, 'train_labels': self.train_labels, 'train_images': self.train_images,
+                 'train_embeddings': self.train_embeddings, 'test_labels': self.test_labels, 'test_images': self.test_images,
+                 'test_embeddings': self.test_embeddings}
+        with open(os.path.join(self.path, 'base.json'), 'wb+') as file:
+            print('saving base')
+            pickle.dump({'params': params, 'faces': faces}, file)
+        print('Done')

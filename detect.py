@@ -20,8 +20,8 @@ def start_tracking(config):
     detection_rate = config.detection_rate
     face_size = config.face_size
     conf = config.detection_conf
-    vs = VideoStream(src=config.video_src).start()
-    # vs = FileVideoStream(path='test_videos/keanu.mp4').start()
+    # vs = VideoStream(src=config.video_src).start()
+    vs = FileVideoStream(path='test_videos/keanu.mp4').start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)

@@ -2,13 +2,13 @@ import os
 
 import cv2
 
-from face_authentication import FaceRecognizer
+from face_recognition import FaceRecognizer
 from utils.image_utils import align_faces
 
 
 class TrackableFace:
-    MAX_FAILED = 5  # number of maximum failed recognitions before we stop recognizing this face
-    MIN_N_FACES = 4  # minimum number of stored aligned faces to recognize person
+    MAX_FAILED = 2  # number of maximum failed recognitions before we stop recognizing this face
+    FACES_BATCH_SIZE = 4  # minimum number of stored aligned faces to recognize person
 
     def __init__(self, faceID, centroid, face_size, box):
         """
@@ -26,7 +26,7 @@ class TrackableFace:
         self.photo_path = f'trackable_faces/{faceID}'
         if not os.path.exists(self.photo_path):
             os.mkdir(self.photo_path)
-
+        self.min_n_faces = TrackableFace.FACES_BATCH_SIZE
         self.saved_faces = 0
         self.face_size = face_size  # size of face to store
         self.name = 'Unknown'
@@ -37,21 +37,21 @@ class TrackableFace:
     def authorize(self, frame, centroid, face_recognizer: FaceRecognizer):
 
         if self.failed_detections >= TrackableFace.MAX_FAILED:
-            name = face_recognizer.register_new_face(self)
+            name = face_recognizer.register_new_face(self.faces)
             self.name, self.prob = name, 1.0
             return None
 
-        if len(self.faces) < TrackableFace.MIN_N_FACES:  # not ready for authentication
+        if len(self.faces) < self.min_n_faces:  # not ready for recognition
             # frame = to_rgb(frame)
             face, success = align_faces(frame, box=self.curr_box)
-            if success == 1:
+            if success == 1:  # if aligned face is ok
                 self.faces.append(face)
             print('Not ready')
             return None
 
         label, conf = face_recognizer.validate_face(self.faces, confidence=0.6)
         if label == 'Unknown':
-            self.faces = []
+            self.min_n_faces += TrackableFace.FACES_BATCH_SIZE
             self.failed_detections += 1
         else:
             self.name = label
@@ -67,6 +67,5 @@ class TrackableFace:
         """
         face, success = align_faces(frame, box=self.curr_box)
         if success == 1:
-            self.faces.append(face)
             cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', face)
             self.saved_faces += 1

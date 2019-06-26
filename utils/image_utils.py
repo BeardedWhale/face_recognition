@@ -170,7 +170,7 @@ def get_faces_paths_and_labels(data_path, classes,  nrof_train_images)->Tuple[Li
 
 
 
-def load_images(image_paths, image_size, quantize=False, align=False):
+def load_images(image_paths, image_size, quantize=False, align=False)->np.array:
     nrof_samples = len(image_paths)
     images = []
     for i in range(nrof_samples):

@@ -1,13 +1,8 @@
-import os
 from collections import OrderedDict
 
-import cv2
 import dlib
 import numpy as np
 from scipy.spatial import distance as dist
-
-from face_authentication import FaceRecognizer
-from utils.image_utils import align_faces
 
 
 class MultipleFaceTracker:

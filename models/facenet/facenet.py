@@ -33,7 +33,8 @@ from tensorflow.python.platform import gfile
 from termcolor import colored
 from tqdm import tqdm
 
-from face_authentication import FaceRecognizer
+# from face_recognition import FaceRecognizer
+from face_recognition import FaceRecognizer
 from models.facenet.triplet_loss import batch_hard_triplet_loss
 from utils.face_base import FaceBase
 from utils.image_utils import preprocess_image, load_images, get_faces_paths_and_labels, get_images_paths
@@ -57,7 +58,6 @@ def get_triplet_loss(margin=0.6):
 
 
 def load_classifier(classifier_filename):
-    print(f'Loading {classifier_filename}')
     if os.path.isfile(classifier_filename) and os.path.exists(classifier_filename):
         with open(classifier_filename, 'rb') as infile:
             model = pickle.load(infile)
@@ -121,7 +121,7 @@ class Facenet(FaceRecognizer):
     def get_embedding_tflite(self, img):
         """
         :param img: [np.array]
-        :return:
+        :return: [embedding]
         """
         self.interpreter.set_tensor(self.input_details[0]['index'], img)
         self.interpreter.invoke()
@@ -129,6 +129,7 @@ class Facenet(FaceRecognizer):
         return output_data
 
     def get_embedding(self, img):
+        # tflite quantized model
         if self.tflite:
             return self.get_embedding_tflite(img)
 
@@ -278,7 +279,7 @@ class Facenet(FaceRecognizer):
 
         model = Model(inputs=emb, outputs=x)
         model.compile(loss=triplet_loss, optimizer='adam', metrics=[])
-        model.summary()
+        # model.summary()
         # Training model
         start = time.time()
         history = model.fit(self.facebase.train_embeddings, self.facebase.train_labels, epochs=epochs,
@@ -309,9 +310,9 @@ class Facenet(FaceRecognizer):
             - classifier_type: type of a classifier to use for update
         :return: True in case of successful update, False otherwise
         """
-        success = self.facebase.update(faces, name)
-        # if not success:
-        #     return False
+        if faces:
+            self.facebase.update(faces, name)
+            self.class_names = self.facebase.classes
         total_start = time.time()
         batch_size = kwargs.get('batch_size', 50)
         epochs = kwargs.get('epochs', 50)
