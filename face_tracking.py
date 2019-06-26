@@ -1,60 +1,8 @@
-import math
-import os
 from collections import OrderedDict
 
-import cv2
 import dlib
 import numpy as np
 from scipy.spatial import distance as dist
-
-
-class TrackableFace:
-    def __init__(self, faceID, centroid, face_size, box):
-        """
-        Creates Face object
-        :param faceID:
-        :param centroid:
-        :param face_size:
-        :param box:
-        """
-        # store the object ID, then initialize a list of centroids
-        # using the current centroid
-        self.faceID = faceID
-        self.centroids = [centroid]
-        self.curr_box = box
-        self.photo_path = f'trackable_faces/{faceID}'
-        if not os.path.exists(self.photo_path):
-            os.mkdir(self.photo_path)
-
-        self.saved_faces = 0
-        self.face_size = face_size  # size of face to store
-
-    def save_face(self, frame, centroid):
-        """
-        Saves face to .jpg file to be used for face authentification
-        :param frame: current video frame
-        :param centroid: coordinates of a face center
-        :return: nothing
-        """
-        frame_shape = frame.shape
-        coordinates = []
-        for i in range(2):
-            assert self.face_size <= frame_shape[i]
-            diff = int(math.ceil(self.face_size / 2))
-            start = centroid[i] - diff
-            end = centroid[i] + diff
-            if start < 0:
-                start = 0
-                end = start + self.face_size
-            if end >= frame_shape[i]:
-                end = frame_shape[i]
-                start = end - self.face_size
-            coordinates.extend([start, end])
-
-        startX, endX, startY, endY = coordinates
-        cropped_face = frame[startY:endY, startX:endX, :]
-        cv2.imwrite(self.photo_path + f'/{self.saved_faces}.jpg', cropped_face)
-        self.saved_faces += 1
 
 
 class MultipleFaceTracker:
@@ -98,7 +46,6 @@ class MultipleFaceTracker:
         """
         Updates faces position according to trackers by matching newly detected faces
         and old tracked ones. Faces are matched by distance between old and new centroids
-        # TODO add IoU metric ?
         :param box_coordinates: box coordinates of detected faces
         :return: dict {faceID: (centroid coordinates, box_coordinates)}
         """
