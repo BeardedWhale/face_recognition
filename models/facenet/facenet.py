@@ -57,6 +57,7 @@ def get_triplet_loss(margin=0.6):
 
 
 def load_classifier(classifier_filename):
+    print(f'Loading {classifier_filename}')
     if os.path.isfile(classifier_filename) and os.path.exists(classifier_filename):
         with open(classifier_filename, 'rb') as infile:
             model = pickle.load(infile)
@@ -76,7 +77,7 @@ class Facenet(FaceRecognizer):
     FACENET_EMB_MODEL_PATH = 'models/facenet/embedding_model.h5'
     FACE_BASE_PATH = 'face_base'
 
-    def __init__(self, classifier_type, tflite=False, **kwargs):
+    def __init__(self, classifier_type, tflite=False, face_base_path=FACE_BASE_PATH, **kwargs):
         """
 
         :param classifier_type:
@@ -84,11 +85,12 @@ class Facenet(FaceRecognizer):
         :param kwargs:
             -nrof_train_images: number of image to use for training
         """
-        super().__init__('Facenet')
+        super().__init__()
         nrof_train_images = kwargs.get('nrof_train_images', 12)
         # Load Facenet model
         self.tflite = tflite
-        self.emb_model = load_emb_model(Facenet.FACENET_EMB_MODEL_PATH)
+        emb_model_path = f'models/facenet/embedding_model{"_tflite" if tflite else ""}.h5'
+        self.emb_model = load_emb_model(emb_model_path)
         if not self.tflite:
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -112,7 +114,7 @@ class Facenet(FaceRecognizer):
         if not self.classifier:
             print(colored('You need to pretrain face classifier before applying face recognition', 'red'))
         self.facenet_embedding_size = 512
-        self.facebase = FaceBase(Facenet.FACE_BASE_PATH, get_embedding=self.get_embedding, quantize=self.tflite,
+        self.facebase = FaceBase(face_base_path, get_embedding=self.get_embedding, quantize=self.tflite,
                                  image_size=160, align_faces=True, nrof_train_images=nrof_train_images)
         self.class_names = self.facebase.classes
 

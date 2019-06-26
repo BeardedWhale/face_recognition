@@ -2,13 +2,13 @@ import argparse
 
 import cv2
 import imutils
-from imutils.video import VideoStream, FileVideoStream
+from imutils.video import FileVideoStream, VideoStream
 from termcolor import colored
 
-from face_authentication import FaceRecognizer
+from face import TrackableFace
 from face_detection import FaceDetector
 from face_tracking import MultipleFaceTracker
-from face import TrackableFace
+from models.facenet.facenet import Facenet
 
 
 def start_tracking(config):
@@ -20,8 +20,8 @@ def start_tracking(config):
     detection_rate = config.detection_rate
     face_size = config.face_size
     conf = config.detection_conf
-    # vs = VideoStream(src=config.video_src).start()
-    vs = FileVideoStream(path='test_videos/keanu.mp4').start()
+    vs = VideoStream(src=config.video_src).start()
+    # vs = FileVideoStream(path='test_videos/keanu.mp4').start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
@@ -36,7 +36,8 @@ def start_tracking(config):
     # map each unique object ID to a TrackableFace
     ct = MultipleFaceTracker(tracker_type='correlation', max_disappeared=40, max_distance=50)
     fd = FaceDetector(config)
-    fr = FaceRecognizer(config)
+    if config.recognizer == 'facenet':
+        fr = Facenet(classifier_type='KNN', tflite=True)
     print('Initialized models')
 
     while True:
@@ -72,7 +73,6 @@ def start_tracking(config):
 
             if total_frames % (detection_rate) == 1:
                 face.save_face(frame)
-
 
             text = f"ID {faceID}, name {face.name}:{face.prob}"
             faces_info.append({'text': text, 'centroid': centroid})

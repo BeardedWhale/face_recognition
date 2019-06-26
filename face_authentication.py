@@ -4,8 +4,8 @@ from typing import List, Tuple
 
 
 class FaceRecognizer:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
+        pass
 
     def recognize_faces(self, faces_img: List, conf=0.7) -> Tuple[List, List]:
         pass
