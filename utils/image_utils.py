@@ -2,6 +2,7 @@ import json
 import math
 import os
 from collections import OrderedDict
+from typing import Tuple, List
 
 import cv2
 import dlib
@@ -139,20 +140,18 @@ def get_images_paths(folder, nrof_train_images):
     return train_images, test_images
 
 
-def get_faces_paths_and_labels(data_path, nrof_train_images):
+def get_faces_paths_and_labels(data_path, classes,  nrof_train_images)->Tuple[List, List, List, List]:
     """
     Loads faces dataset, ignores folders that are not in config.json
     :param data_path:
+    :param classes: list of classes
     :param nrof_train_images:
-    :return:
+    :return: trian_labels, train_paths, test_labels, test_paths
     """
     data_path = os.path.expanduser(data_path)
     inner_folders = os.listdir(data_path)
     trian_labels = []
     test_labels = []
-    with open(os.path.join(data_path, 'config.json')) as file:
-        classes = json.loads(file.read())
-        print('classes', classes)
     train_paths = []
     test_paths = []
     inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
@@ -167,7 +166,8 @@ def get_faces_paths_and_labels(data_path, nrof_train_images):
         trian_labels.extend([label] * len(train_images))
         test_paths.extend(test_images)
         test_labels.extend([label] * len(test_images))
-    return classes, trian_labels, train_paths, test_labels, test_paths
+    return trian_labels, train_paths, test_labels, test_paths
+
 
 
 def load_images(image_paths, image_size, quantize=False, align=False):

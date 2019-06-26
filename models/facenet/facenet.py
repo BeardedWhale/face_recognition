@@ -15,6 +15,7 @@ Classification model:
     -- use_emb_model
 """
 import itertools
+import json
 import math
 import os
 import pickle
@@ -32,7 +33,9 @@ from tensorflow.python.platform import gfile
 from termcolor import colored
 from tqdm import tqdm
 
+from face_authentication import FaceRecognizer
 from models.facenet.triplet_loss import batch_hard_triplet_loss
+from utils.face_base import FaceBase
 from utils.image_utils import preprocess_image, load_images, get_faces_paths_and_labels, get_images_paths
 
 
@@ -58,7 +61,7 @@ def load_classifier(classifier_filename):
         with open(classifier_filename, 'rb') as infile:
             model = pickle.load(infile)
             return model
-    return None, []
+    return None
 
 
 def load_emb_model(emb_model_path):
@@ -67,13 +70,22 @@ def load_emb_model(emb_model_path):
     return model
 
 
-class Facenet:
+class Facenet(FaceRecognizer):
     FACENET_PATH = 'models/facenet/model.pb'
     FACENET_TFLITE_PATH = 'models/facenet/facenet.tflite'
     FACENET_EMB_MODEL_PATH = 'models/facenet/embedding_model.h5'
     FACE_BASE_PATH = 'face_base'
 
-    def __init__(self, classifier_type, tflite=False):
+    def __init__(self, classifier_type, tflite=False, **kwargs):
+        """
+
+        :param classifier_type:
+        :param tflite:
+        :param kwargs:
+            -nrof_train_images: number of image to use for training
+        """
+        super().__init__('Facenet')
+        nrof_train_images = kwargs.get('nrof_train_images', 12)
         # Load Facenet model
         self.tflite = tflite
         self.emb_model = load_emb_model(Facenet.FACENET_EMB_MODEL_PATH)
@@ -100,9 +112,15 @@ class Facenet:
         if not self.classifier:
             print(colored('You need to pretrain face classifier before applying face recognition', 'red'))
         self.facenet_embedding_size = 512
-        self.database = self._get_dataset_(Facenet.FACE_BASE_PATH, self.facenet_embedding_size, align_faces=True)
+        self.facebase = FaceBase(Facenet.FACE_BASE_PATH, get_embedding=self.get_embedding, quantize=self.tflite,
+                                 image_size=160, align_faces=True, nrof_train_images=nrof_train_images)
+        self.class_names = self.facebase.classes
 
     def get_embedding_tflite(self, img):
+        """
+        :param img: [np.array]
+        :return:
+        """
         self.interpreter.set_tensor(self.input_details[0]['index'], img)
         self.interpreter.invoke()
         output_data = self.interpreter.get_tensor(self.output_details[0]['index'])
@@ -151,6 +169,7 @@ class Facenet:
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         names = [self.class_names[index] for index in best_class_indices]
+        print(names)
         for i in range(len(names)):
             if best_class_probabilities[i] < conf:
                 names[i] = 'Unknown'
@@ -179,8 +198,6 @@ class Facenet:
         if self.emb_model is not None and use_emb:
             emb_size //= 2
         print(emb_size)
-        dataset = self._get_dataset_(train_path, emb_size, batch_size=batch_size,
-                                     tflite=self.tflite, align_faces=align_faces, use_emb_model=use_emb)
 
         print(f'Training {self.classifier_type} classifier...')
         start = time.time()
@@ -188,7 +205,7 @@ class Facenet:
             model = KNN(n_neighbors=n_neighbors)
         else:  # SVC
             model = SVC(kernel=kernel)
-        model.fit(dataset['embeddings'], dataset['labels'])
+        model.fit(self.facebase.train_embeddings, self.facebase.train_labels)
         print(f'Training time: {time.time() - start}')
         classifier_path = f'models/facenet/face_classifier_{self.classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
@@ -199,13 +216,13 @@ class Facenet:
         print('Done.')
 
         # Evaluate model
-        predictions = model.predict_proba(dataset['test_embeddings'])  # fix for svc
+        predictions = model.predict_proba(self.facebase.test_embeddings)  # fix for svc
         best_class_indices = np.argmax(predictions, axis=1)
-        accuracy = np.mean(np.equal(best_class_indices, dataset['test_labels']))
+        accuracy = np.mean(np.equal(best_class_indices, self.facebase.test_labels))
         print(f'Evaluation {self.classifier_type} accuracy: {accuracy}')
         return accuracy
 
-    def train_embeddings(self, dataset, margin=0.6, **kwargs):
+    def train_embeddings(self, margin=0.6, **kwargs):
         """
         Trains embeddings from facenet embeddings using triplet loss
         :param train_path: train faces embeddings from facenet
@@ -262,24 +279,23 @@ class Facenet:
         model.summary()
         # Training model
         start = time.time()
-        history = model.fit(dataset['embeddings'], dataset['labels'], epochs=epochs, batch_size=50, shuffle=False,
-                            validation_split=val_split, verbose=0)
+        history = model.fit(self.facebase.train_embeddings, self.facebase.train_labels, epochs=epochs,
+                            batch_size=50, shuffle=False, validation_split=val_split, verbose=0)
         print(f'Training time: {time.time() - start}')
         val_loss_history = history.history['val_loss']
         val_loss = [val_loss_history[-1]]
         print(f'Val Loss: {val_loss[0]}')
-        loss = model.evaluate(dataset['test_embeddings'], dataset['test_labels'])
+        loss = model.evaluate(self.facebase.test_embeddings, self.facebase.test_labels)
         val_loss.append(loss)
         self.emb_model = model
         model.save(Facenet.FACENET_EMB_MODEL_PATH)
         print(f'Saved model to {Facenet.FACENET_EMB_MODEL_PATH}')
         return val_loss
 
-    def update_model(self, new_name, **kwargs):
+    def update_model(self, faces, name, **kwargs):
         """
-        Updates tripnet embeddings model and KNN for face classification
-        :param train_path: path to train images
-        :param test_path: path to test_images
+        Updates tripnet embeddings model and KNN for face classification with new user and his faces
+        :param new_name: name of a new person to add to base and classifier
         :param kwargs:
             - batch_size: size of training batch
             - epochs: number of epochs to train
@@ -288,10 +304,12 @@ class Facenet:
             - n_neighbors: n_neighbors for KNN
             - margin: margin for triplet loss
             - nrof_train_images: number of images of person to use for training, rest of them for testing
-            - classifier_type:
-        :return:
+            - classifier_type: type of a classifier to use for update
+        :return: True in case of successful update, False otherwise
         """
-        self.update_dataset(new_name, data_path=Facenet.FACE_BASE_PATH)
+        success = self.facebase.update(faces, name)
+        # if not success:
+        #     return False
         total_start = time.time()
         batch_size = kwargs.get('batch_size', 50)
         epochs = kwargs.get('epochs', 50)
@@ -305,15 +323,14 @@ class Facenet:
         nrof_train_images = kwargs.get('nrof_train_images', 12)
         start = time.time()
         print('Loading data…')
-        emb_dataset = self.database
         print(f'Loading data took:{time.time() - start}')
         # Training embedding net
-        losses = self.train_embeddings(dataset=emb_dataset, margin=margin,
+        losses = self.train_embeddings(dataset=self.facebase, margin=margin,
                                        validation_split=val_split, epochs=epochs)
         print(f'Embeddings triplet losses:{losses}')
         # Training classifier
-        train_embeddings = self.emb_model.predict(emb_dataset['embeddings'])
-        test_embeddings = self.emb_model.predict(emb_dataset['test_embeddings'])
+        train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
+        test_embeddings = self.emb_model.predict(self.facebase.test_embeddings)
         clsf_parameters = {'knn': [4, 5, 6, 7, 8, 9, 10],
                            'svc': list(itertools.product(
                                [1, 2, 4, 6, 8, 10, 12],  # C
@@ -332,27 +349,17 @@ class Facenet:
                 classifier = KNN(n_neighbors=params)
             else:  # classifier_type == 'svc':
                 classifier = SVC(C=params[0], kernel=params[1])
-            classifier.fit(train_embeddings, emb_dataset['labels'])
+            classifier.fit(train_embeddings, self.facebase.train_labels)
             classifiers.append(classifier)
             if not need_tuning:  # get the first classifier
                 accs = [1.0]
                 break
             predictions = classifier.predict(test_embeddings)
-            accs.append(np.mean(np.equal(predictions, emb_dataset['test_labels'])))
+            accs.append(np.mean(np.equal(predictions, self.facebase.test_labels)))
         best_id = np.argmax(accs, axis=0)
         self.classifier = classifiers[best_id]
         print(f'Classifier tuning took: {time.time() - start}')
         print(f'Classifier accuracy:{accs[best_id]}')
-        paths = emb_dataset['test_image_paths']
-        predictions = self.classifier.predict(test_embeddings)
-        # for i in range(len(predictions)):
-        #     true_label = emb_dataset['test_labels'][i]
-        #     true_name = self.class_names[true_label]
-        #     predicted_name = self.class_names[predictions[i]]
-        #     if predictions[i] != true_label:
-        #         print(colored(f'{paths[i]} {true_name} {predicted_name}', 'red'))
-        #     else:
-        #         print(f'{paths[i]} {true_name} {predicted_name}')
 
         classifier_path = f'models/facenet/face_classifier_{classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
@@ -362,81 +369,4 @@ class Facenet:
             pickle.dump(classifier, outfile)
         print('Done.')
         print(colored(f'Updating models took: {time.time() - total_start}', 'green'))
-
-    def _get_dataset_(self, data_path, emb_size, batch_size=32, align_faces=False, **kwargs):
-        """
-        Loads dataset from data_path
-        :param data_path:
-        :param emb_size: self.embedding_size if not use_emb_model
-        :param batch_size: size of batch to load
-        :param tflite: if use facenet quantized model
-        :param use_emb_model: if use neural net to get embeddings
-        :param align_faces: if use aligning of faces
-        :return: dataset dict: {classes, labels, image_paths, embeddings}
-        """
-        nrof_train_images = kwargs.get('nrof_train_images', 12)
-        dataset = {}
-        classes, train_labels, train_image_paths, \
-        test_labels, test_image_paths = get_faces_paths_and_labels(data_path, nrof_train_images)
-        self.class_names = classes
-
-        print(f'Number of classes: {len(classes)}')
-        print(f'Number of train images: {len(train_image_paths)}')
-        print(f'Number of test images: {len(test_image_paths)}')
-        print('Calculating features for images...')
-        train_len = len(train_image_paths)
-        images_paths = train_image_paths + test_image_paths
-        nrof_images = len(images_paths)
-        nrof_batches_per_epoch = int(math.ceil(1.0 * nrof_images / batch_size))
-        embeddings = np.zeros((nrof_images, emb_size))
-        for i in tqdm(range(nrof_batches_per_epoch), total=nrof_batches_per_epoch):
-            start_index = i * batch_size
-            end_index = min((i + 1) * batch_size, nrof_images)
-            paths_batch = images_paths[start_index:end_index]
-            images = load_images(paths_batch, self.image_size, quantize=self.tflite, align=align_faces)
-            if self.tflite:
-                emb = np.zeros((len(images), emb_size))
-                for j in range(len(images)):
-                    emb_j = self.get_embedding_tflite(np.array([images[j]]))
-                    emb[j, :] = emb_j
-            else:
-                emb = self.get_embedding(images)
-            embeddings[start_index:end_index, :] = emb
-
-        dataset['classes'] = classes
-        dataset['labels'] = train_labels
-        dataset['image_paths'] = train_image_paths
-        dataset['embeddings'] = embeddings[:train_len]
-        dataset['test_embeddings'] = embeddings[train_len:]
-        dataset['test_labels'] = test_labels
-        dataset['test_image_paths'] = test_image_paths
-        print(f'Dataset size: {sys.getsizeof(dataset)} bytes')
-        return dataset
-
-    def update_dataset(self, new_name, data_path):
-        """
-        TODO add handling of existing name
-        Updates dataset of faces by loading new images
-        :return:
-        """
-        nrof_train_imges = 12
-        self.class_names.append(new_name)
-        label = len(self.class_names) - 1
-        train_paths, test_paths = get_images_paths(os.path.join(data_path, new_name),
-                                                   nrof_train_images=nrof_train_imges)
-        images_paths = train_paths + test_paths
-        images = load_images(images_paths, self.image_size, quantize=self.tflite, align=True)
-        embeddings = np.zeros((len(images_paths), 512))
-        if self.tflite:
-            for i in range(len(images_paths)):
-                embeddings[i,:] = self.get_embedding_tflite(np.array([images[i]]))
-        else:
-            embeddings = self.get_embedding(images)
-
-        total_embeddings = np.concatenate((self.database['embeddings'], embeddings[:len(train_paths)]), axis=0)
-        total_test_embeddings = np.concatenate((self.database['test_embeddings'], embeddings[len(train_paths):]), axis=0)
-        self.database['embeddings'] = total_embeddings
-        self.database['test_embeddings'] = total_test_embeddings
-        self.database['labels'].extend([label]*len(train_paths))
-        self.database['test_labels'].extend([label]*(len(test_paths)))
-
+        return True
