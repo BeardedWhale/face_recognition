@@ -8,7 +8,7 @@ from utils.image_utils import align_faces
 
 class TrackableFace:
     MAX_FAILED = 2  # number of maximum failed recognitions before we stop recognizing this face
-    FACES_BATCH_SIZE = 4  # minimum number of stored aligned faces to recognize person
+    FACES_BATCH_SIZE = 1  # minimum number of stored aligned faces to recognize person
 
     def __init__(self, faceID, centroid, face_size, box):
         """

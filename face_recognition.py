@@ -2,8 +2,6 @@ import time
 from collections import Counter
 from typing import List, Tuple
 
-from termcolor import colored
-from matplotlib import pyplot as plt
 
 class FaceRecognizer:
     def __init__(self):
@@ -41,8 +39,6 @@ class FaceRecognizer:
         :return: new name in db
         """
         print(f'Seems I do not know person {id}')
-        plt.imshow(faces[0])
-        plt.show()
         name = input(f'Enter new user name for person {id}: ')
         self.update_model(faces, name)
         return name

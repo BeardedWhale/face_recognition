@@ -23,8 +23,7 @@ def start_tracking(config):
     face_size = config.face_size
     conf = config.detection_conf
     mode = config.mode
-    # vs = VideoStream(src=0).start()
-    vs = FileVideoStream(path='test_videos/rick&morty.mov').start()
+    vs = VideoStream(src=0).start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
@@ -118,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--detector', choices=['ssd', 'mtcnn'], default='ssd')
     parser.add_argument('--recognizer', choices=['facenet'], default='facenet')
 
-    parser.add_argument('--detection_rate', type=int, default=10)
+    parser.add_argument('--detection_rate', type=int, default=16)
     parser.add_argument('--face_size', type=int, default=160)
     parser.add_argument('--detection_conf', type=float, default=0.7)
     parser.add_argument('--classifier_type', type=str, default='KNN')
