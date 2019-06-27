@@ -46,3 +46,4 @@ will retrain model to classify new person
     - --detecttion_conf        // minimum probability (from face detector) to consider object a face
     - --classifier_type [KNN, SVC] // type of classifier to use for face recognition
     
+![Demo](https://github.com/BeardedWhale/face_recognition/blob/master/demo/demo1.mov)
