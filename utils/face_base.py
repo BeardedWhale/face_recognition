@@ -9,6 +9,7 @@ from tqdm import tqdm
 from utils.image_utils import get_faces_paths_and_labels, load_images, get_images_paths, preprocess_image, to_rgb
 
 import pickle
+from termcolor import colored
 class FaceBase:
 
     def __init__(self, data_path, get_embedding=None, **kwargs):
@@ -26,7 +27,7 @@ class FaceBase:
                 ...
              ...
             |
-            base.json // stores info about dataset classes
+            base.pk // stores info about dataset classes
                             (in that order, in which classifier will assign labels)
 
         :param data_path: path to dataset
@@ -38,6 +39,7 @@ class FaceBase:
             - nrof_train_images: number of images to use for training, rest for testing
         """
         self.path = data_path
+        self.store_file = 'base.pk'
         self.classes = []
         if get_embedding:
             self.get_embedding = get_embedding
@@ -51,14 +53,14 @@ class FaceBase:
         self.nrof_train_images = kwargs.get('nrof_train_images')
         start = time.time()
         self.init_face_base(**kwargs)
-        print(f'Loading took: {time.time() - start}')
+        print(colored('[FACE BASE]', 'blue'), f'Loading took: {time.time() - start}')
 
     def load_base_from_folder(self):
         """
         Loads dataset
         :return:
         """
-        print(f'Loading face base from {self.path} folder')
+        print(colored('[FACE BASE]', 'blue'), f'Loading face base from {self.path} folder')
         data_path = os.path.expanduser(self.path)
         inner_folders = os.listdir(self.path)
         inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
@@ -70,7 +72,10 @@ class FaceBase:
         for i, folder in enumerate(inner_folders):
             class_name = folder.replace(data_path, '')
             classes[i] = class_name
-        print(classes)
+
+        self.classes = list(classes.values())
+        print(colored('[FACE BASE]', 'blue'))
+        print('Face base classes:', self.classes)
         train_labels, train_paths, test_labels, test_paths = \
             get_faces_paths_and_labels(self.path, self.classes, self.nrof_train_images)
 
@@ -122,7 +127,6 @@ class FaceBase:
         test_len = len(test_images)
         nrof_images = len(faces)
         embeddings = []
-        print(len(faces), 'faces')
         if self.get_embedding is not None:
             for i in tqdm(range(nrof_images), total=nrof_images):
                 embeddings.append(self.get_embedding([faces[i]])[0])
@@ -139,17 +143,17 @@ class FaceBase:
         if self.get_embedding is not None:
             assert len(self.train_embeddings) == len(self.train_labels)
             assert len(self.test_embeddings) == len(self.test_labels)
-        print(f'Updating face base took {time.time() - start}')
+        print(colored('[FACE BASE]', 'blue'), f'Updating face base took {time.time() - start}')
         self.save()
         return True
 
 
     def init_face_base(self, **kwargs):
         """
-        Initializes face base by loading base.json file or by loading face base from img folders
+        Initializes face base by loading base.pk file or by loading face base from img folders
         :return:
         """
-        if not os.path.exists(os.path.join(self.path, 'base.json')):
+        if not os.path.exists(os.path.join(self.path, self.store_file)):
             self.train_labels, self.train_images, self.train_embeddings, \
             self.test_labels, self.test_images, self.test_embeddings = self.load_base_from_folder()
             self.align_faces = kwargs.get('align_faces', False)
@@ -160,7 +164,7 @@ class FaceBase:
             self.save()
         else:
             # Load all from pickle file
-            with open(os.path.join(self.path, 'base.json'), 'rb') as file:
+            with open(os.path.join(self.path, self.store_file), 'rb') as file:
                 face_base = pickle.load(file)
             params = face_base['params']
             self.align_faces = params.get('align_faces', False)
@@ -181,11 +185,11 @@ class FaceBase:
         Saves face to pickle file
         :return: nothing
         """
-        print('Saving face base...')
+        print(colored('[FACE BASE]', 'blue'), 'Saving face base...')
         params = {'align_faces': self.align_faces, 'image_size': self.image_size,
                   'quantize': self.quantize, 'nrof_train_images': self.nrof_train_images}
         faces = {'classes': self.classes, 'train_labels': self.train_labels, 'train_images': self.train_images,
                  'train_embeddings': self.train_embeddings, 'test_labels': self.test_labels, 'test_images': self.test_images,
                  'test_embeddings': self.test_embeddings}
-        with open(os.path.join(self.path, 'base.json'), 'wb+') as file:
+        with open(os.path.join(self.path, self.store_file), 'wb+') as file:
             pickle.dump({'params': params, 'faces': faces}, file)

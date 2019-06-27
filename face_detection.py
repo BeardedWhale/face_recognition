@@ -1,3 +1,4 @@
+import time
 from functools import partial
 
 import cv2
@@ -16,7 +17,8 @@ class FaceDetector:
         :return:
         """
         if self.name == 'ssd':
-            net = cv2.dnn.readNetFromCaffe(config.prototxt, config.detection_model)
+            net = cv2.dnn.readNetFromCaffe('models/ssd_model/deploy.prototxt.txt',
+                                           'models/ssd_model/res10_300x300_ssd_iter_140000.caffemodel')
             return partial(self.__detect_faces_ssd, model=net)
         if self.name == 'mtcnn':
             from mtcnn.mtcnn import MTCNN
@@ -47,6 +49,8 @@ class FaceDetector:
         return faces
 
     def __detect_faces_mtcnn(self, model, frame, conf):
+        frame = cv2.resize(frame, (300, 300))
+        # model.setInput(blob)
         face_detections = model.detect_faces(frame)
         faces = []
         for face in face_detections:

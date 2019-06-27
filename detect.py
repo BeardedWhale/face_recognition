@@ -10,6 +10,7 @@ from face import TrackableFace
 from face_detection import FaceDetector
 from face_tracking import MultipleFaceTracker
 from models.facenet.facenet import Facenet
+import time
 
 
 def start_tracking(config):
@@ -22,8 +23,8 @@ def start_tracking(config):
     face_size = config.face_size
     conf = config.detection_conf
     mode = config.mode
-    # vs = VideoStream(src=config.video_src).start()
-    vs = FileVideoStream(path='test_videos/keanu.mp4').start()
+    # vs = VideoStream(src=0).start()
+    vs = FileVideoStream(path='test_videos/rick&morty.mov').start()
 
     # initialize the frame dimensions (we'll set them as soon as we read
     # the first frame from the video)
@@ -78,7 +79,7 @@ def start_tracking(config):
             if total_frames % (detection_rate) == 1 and mode > 0:
                 face.save_face(frame)
 
-            text = f"ID {faceID}, name {face.name}:{face.prob}"
+            text = f"ID {faceID}, {face.name}:{face.prob}"
             faces_info.append({'text': text, 'centroid': centroid})
 
         for info in faces_info:
@@ -100,6 +101,8 @@ def start_tracking(config):
         if key == ord("q"):
             break
         total_frames += 1
+        if total_frames == 1:
+            time.sleep(20)
 
 
 if __name__ == '__main__':
@@ -108,24 +111,18 @@ if __name__ == '__main__':
     if not os.path.exists('face_base'):
         os.mkdir('face_base')
     parser = argparse.ArgumentParser()
-
+    parser.add_argument('--mode', choices=[0, 1, 2], default=2,
+                        help='Modes of detection. 0 - detect&track faces, 1 - same as 2 + save faces,'
+                             ' 2 - detect&track&register', type=int)
     parser.add_argument('--tracker', choices=['centroid'], default='centroid')
     parser.add_argument('--detector', choices=['ssd', 'mtcnn'], default='ssd')
     parser.add_argument('--recognizer', choices=['facenet'], default='facenet')
-    parser.add_argument('--mode', choices=[0, 1, 2], default=2,
-                        help='Modes of detection. 0 - detect&track faces, 1 - same as 2 + save faces,'
-                             ' 2 - detect&track&register')
-    parser.add_argument('--detection_rate', type=int, default=6)
+
+    parser.add_argument('--detection_rate', type=int, default=10)
     parser.add_argument('--face_size', type=int, default=160)
     parser.add_argument('--detection_conf', type=float, default=0.7)
-    parser.add_argument('--prototxt', type=str, default='models/ssd_model/deploy.prototxt.txt')
-    parser.add_argument('--detection_model', type=str,
-                        default='models/ssd_model/res10_300x300_ssd_iter_140000.caffemodel')
-    parser.add_argument('--facenet_path', type=str, default='models/facenet/model.pb')
     parser.add_argument('--classifier_type', type=str, default='KNN')
-    parser.add_argument('--video_src', type=int, choices=[0, 1], default=0,
-                        help='0 for standard webcam, 1 for usb')
-    parser.add_argument('--use_recognition', type=bool, default=False)
+    parser.add_argument('--tflite', type=bool, default=True)
     configuration = parser.parse_args()
 
     print('*' * 30)

@@ -37,7 +37,7 @@ class TrackableFace:
     def authorize(self, frame, face_recognizer: FaceRecognizer):
 
         if self.failed_detections >= TrackableFace.MAX_FAILED:
-            name = face_recognizer.register_new_face(self.faces)
+            name = face_recognizer.register_new_face(self.faces, self.faceID)
             self.name, self.prob = name, 1.0
             return None
 

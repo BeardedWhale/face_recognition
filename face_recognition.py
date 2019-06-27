@@ -2,6 +2,8 @@ import time
 from collections import Counter
 from typing import List, Tuple
 
+from termcolor import colored
+from matplotlib import pyplot as plt
 
 class FaceRecognizer:
     def __init__(self):
@@ -32,13 +34,15 @@ class FaceRecognizer:
         else:
             return 'Unkown', 0.0
 
-    def register_new_face(self, faces):
+    def register_new_face(self, faces, id):
         """
         Adds face to face recognition model
         :param faces: list of cropped, aligned rgb images of faces of single person
         :return: new name in db
         """
-        print('Seems I do not know this person')
-        name = input('Enter new user name: ')
+        print(f'Seems I do not know person {id}')
+        plt.imshow(faces[0])
+        plt.show()
+        name = input(f'Enter new user name for person {id}: ')
         self.update_model(faces, name)
         return name

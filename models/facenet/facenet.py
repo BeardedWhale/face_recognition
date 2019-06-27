@@ -30,6 +30,7 @@ from keras.layers import Dense, BatchNormalization, Dropout
 from sklearn.neighbors import KNeighborsClassifier as KNN
 from sklearn.svm import SVC
 from tensorflow.python.platform import gfile
+from matplotlib import pyplot as plt
 from termcolor import colored
 from tqdm import tqdm
 
@@ -84,13 +85,15 @@ class Facenet(FaceRecognizer):
         :param tflite:
         :param kwargs:
             -nrof_train_images: number of image to use for training
+            -align_faces: if use face aligner to extract faces
         """
         super().__init__()
+        align_faces = kwargs.get('align_faces', True)
         nrof_train_images = kwargs.get('nrof_train_images', 12)
         # Load Facenet model
         self.tflite = tflite
-        emb_model_path = f'models/facenet/embedding_model{"_tflite" if tflite else ""}.h5'
-        self.emb_model = load_emb_model(emb_model_path)
+        self.emb_model_path = f'models/facenet/embedding_model{"_tflite" if tflite else ""}.h5'
+        self.emb_model = load_emb_model(self.emb_model_path)
         if not self.tflite:
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -115,7 +118,7 @@ class Facenet(FaceRecognizer):
             print(colored('You need to pretrain face classifier before applying face recognition', 'red'))
         self.facenet_embedding_size = 512
         self.facebase = FaceBase(face_base_path, get_embedding=self.get_embedding, quantize=self.tflite,
-                                 image_size=160, align_faces=True, nrof_train_images=nrof_train_images)
+                                 image_size=160, align_faces=align_faces, nrof_train_images=nrof_train_images)
         self.class_names = self.facebase.classes
 
     def get_embedding_tflite(self, img):
@@ -155,8 +158,11 @@ class Facenet(FaceRecognizer):
         if not self.classifier:
             print(colored('You need to pretrain face classifier!', 'red'))
             return 'Unkown', 0.0
-
+        # plt.imshow(faces_img[0])
+        # plt.show()
         faces_img = np.array([preprocess_image(img, False, False, 160, do_quantize=self.tflite) for img in faces_img])
+        # plt.imshow(faces_img[0])
+        # plt.show()
         facenet_embedding = np.zeros((len(faces_img), self.facenet_embedding_size))
         # Get facenet embeddings
         if self.tflite:
@@ -175,53 +181,48 @@ class Facenet(FaceRecognizer):
         for i in range(len(names)):
             if best_class_probabilities[i] < conf:
                 names[i] = 'Unknown'
+
         return names, best_class_probabilities
 
-    def train_classifier(self, train_path, **kwargs):
+    def train_classifier(self, **kwargs):
         """
         Trains classifier to classify face features
         :param train_data_path: path to train data
         :param test_data_pth: path to test data
         :param batch_size: size
         :param kwargs:
-            - batch_size: size of training batch
-            - align faces: align faces while loading dataset
-            - use_emb_model: use embedding model to get embeddings
             - n_neighbors: n_neighbors for KNN
         :return:
         """
-        batch_size = kwargs.get('batch_size', 64)
-        align_faces = kwargs.get('align_faces', False)
-        use_emb = kwargs.get('use_emb_model', False)
         n_neighbors = kwargs.get('n_neighbors', 5)
         kernel = kwargs.get('kernel', 'rbf')
-        emb_size = self.facenet_embedding_size
 
-        if self.emb_model is not None and use_emb:
-            emb_size //= 2
-        print(emb_size)
-
-        print(f'Training {self.classifier_type} classifier...')
+        print(colored('[FACENET]', 'green'), f'Training {self.classifier_type} classifier...')
         start = time.time()
         if self.classifier_type == 'KNN':
             model = KNN(n_neighbors=n_neighbors)
         else:  # SVC
-            model = SVC(kernel=kernel)
-        model.fit(self.facebase.train_embeddings, self.facebase.train_labels)
-        print(f'Training time: {time.time() - start}')
+            model = SVC(kernel=kernel, probability=True)
+        train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
+        test_embeddings = self.emb_model.predict(self.facebase.test_embeddings)
+        model.fit(train_embeddings, self.facebase.train_labels)
+        print(colored('[FACENET]', 'green'), f'Training time: {time.time() - start}')
         classifier_path = f'models/facenet/face_classifier_{self.classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
         classifier_filename_exp = os.path.expanduser(classifier_path)
-        print(f'Saving {self.classifier_type} to {classifier_filename_exp}...')
+        print(colored('[FACENET]', 'green'), f'Saving {self.classifier_type} to {classifier_filename_exp}...')
         with open(classifier_filename_exp, 'wb') as outfile:
             pickle.dump(model, outfile)
-        print('Done.')
 
         # Evaluate model
-        predictions = model.predict_proba(self.facebase.test_embeddings)  # fix for svc
+        predictions = model.predict_proba(test_embeddings)
         best_class_indices = np.argmax(predictions, axis=1)
+        for i in range(len(best_class_indices)):
+            if best_class_indices[i] != self.facebase.test_labels[i]:
+                print(colored(f'{best_class_indices[i]}, {self.facebase.test_labels[i]}', 'red'))
         accuracy = np.mean(np.equal(best_class_indices, self.facebase.test_labels))
-        print(f'Evaluation {self.classifier_type} accuracy: {accuracy}')
+        print(colored('[FACENET]', 'green'), f'Evaluation {self.classifier_type} accuracy: {accuracy}')
+        self.classifier = model
         return accuracy
 
     def train_embeddings(self, margin=0.6, **kwargs):
@@ -283,15 +284,15 @@ class Facenet(FaceRecognizer):
         start = time.time()
         history = model.fit(self.facebase.train_embeddings, self.facebase.train_labels, epochs=epochs,
                             batch_size=50, shuffle=False, validation_split=val_split, verbose=0)
-        print(f'Training time: {time.time() - start}')
+        print(colored('[FACENET]', 'green'), f'Training emb model time: {time.time() - start}')
         val_loss_history = history.history['val_loss']
         val_loss = [val_loss_history[-1]]
-        print(f'Val Loss: {val_loss[0]}')
+        print(colored('[FACENET]', 'green'), f'Emb model Val Loss: {val_loss[0]}')
         loss = model.evaluate(self.facebase.test_embeddings, self.facebase.test_labels)
         val_loss.append(loss)
         self.emb_model = model
-        model.save(Facenet.FACENET_EMB_MODEL_PATH)
-        print(f'Saved model to {Facenet.FACENET_EMB_MODEL_PATH}')
+        model.save(self.emb_model_path)
+        print(colored('[FACENET]', 'green'), f'Saved model to {Facenet.FACENET_EMB_MODEL_PATH}')
         return val_loss
 
     def update_model(self, faces, name, **kwargs):
@@ -323,13 +324,10 @@ class Facenet(FaceRecognizer):
         need_tuning = kwargs.get('need_tuning', True)
         classifier_type = kwargs.get('classifier_type', 'knn')
         nrof_train_images = kwargs.get('nrof_train_images', 12)
-        start = time.time()
-        print('Loading data…')
-        print(f'Loading data took:{time.time() - start}')
         # Training embedding net
         losses = self.train_embeddings(dataset=self.facebase, margin=margin,
                                        validation_split=val_split, epochs=epochs)
-        print(f'Embeddings triplet losses:{losses}')
+        print(colored('[FACENET]', 'green'), f'Embeddings triplet losses:{losses}')
         # Training classifier
         train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
         test_embeddings = self.emb_model.predict(self.facebase.test_embeddings)
@@ -360,15 +358,15 @@ class Facenet(FaceRecognizer):
             accs.append(np.mean(np.equal(predictions, self.facebase.test_labels)))
         best_id = np.argmax(accs, axis=0)
         self.classifier = classifiers[best_id]
-        print(f'Classifier tuning took: {time.time() - start}')
-        print(f'Classifier accuracy:{accs[best_id]}')
+        print(colored('[FACENET]', 'green'), f'Classifier tuning took: {time.time() - start}')
+        print(colored('[FACENET]', 'green'), f'Classifier accuracy:{accs[best_id]}')
 
         classifier_path = f'models/facenet/face_classifier_{classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
         classifier_filename_exp = os.path.expanduser(classifier_path)
-        print(f'Saving {classifier_type} to {classifier_filename_exp}...')
+        print(colored('[FACENET]', 'green'), f'Saving {classifier_type} to {classifier_filename_exp}...')
         with open(classifier_filename_exp, 'wb') as outfile:
             pickle.dump(classifier, outfile)
         print('Done.')
-        print(colored(f'Updating models took: {time.time() - total_start}', 'green'))
+        print(colored(f'[FACENET] Updating models took: {time.time() - total_start}', 'green'))
         return True
