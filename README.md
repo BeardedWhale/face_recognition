@@ -46,6 +46,28 @@ will retrain model to classify new person
     - --detecttion_conf        // minimum probability (from face detector) to consider object a face
     - --classifier_type [KNN, SVC] // type of classifier to use for face recognition
     
+## Working examples:
+
+### Face recognition:
+
 ![Face recognition](https://github.com/BeardedWhale/face_recognition/blob/master/demo/demo1.gif)
 
+
+
+
+### Face registration:
+
 ![Face registration](https://github.com/BeardedWhale/face_recognition/blob/master/demo/demo2.gif)
+
+
+## References:
+   - Florian Schroff, Dmitry Kalenichenko, James Philbin (2015): 
+   [FaceNet: A Unified Embedding for Face Recognition and Clustering](https://arxiv.org/pdf/1503.03832.pdf)
+ 
+   - Facenet quantization: [Facenet on mobile](https://medium.com/@tomdeore/facenet-on-mobile-cb6aebe38505)
+   
+   - Triplet loss: [Tensorflow triplet loss](https://github.com/omoindrot/tensorflow-triplet-loss)
+   
+   - Kaipeng Zhang, Zhanpeng Zhang, Zhifeng Li (2016): 
+   [Joint Face Detection and Alignment using Multi-task Cascaded Convolutional Networks](https://arxiv.org/pdf/1604.02878.pdf)
+   
