@@ -1,15 +1,16 @@
-import json
 import os
+import pickle
 import time
 from collections import OrderedDict
+
 import cv2
 import numpy as np
+from termcolor import colored
 from tqdm import tqdm
 
-from utils.image_utils import get_faces_paths_and_labels, load_images, get_images_paths, preprocess_image, to_rgb
+from utils.image_utils import get_faces_paths_and_labels, load_images, preprocess_image, to_rgb
 
-import pickle
-from termcolor import colored
+
 class FaceBase:
 
     def __init__(self, data_path, get_embedding=None, **kwargs):
@@ -114,13 +115,14 @@ class FaceBase:
         self.classes.append(name)
         data_path_exp = os.path.expanduser(self.path)
         new_dir = os.path.join(data_path_exp, name)
+        print('name')
         os.mkdir(new_dir)
         for i, face in enumerate(faces):
             face = to_rgb(face)
             cv2.imwrite(os.path.join(new_dir, f'{i}.jpg'), face)
 
         faces = [preprocess_image(img, do_random_crop=False, do_random_flip=False,
-                               image_size=self.image_size, do_quantize=self.quantize) for img in faces]
+                                  image_size=self.image_size, do_quantize=self.quantize) for img in faces]
         train_images = faces[:self.nrof_train_images]
         test_images = faces[self.nrof_train_images:]
         train_len = len(train_images)
@@ -136,8 +138,6 @@ class FaceBase:
         self.train_images = np.concatenate((self.train_images, train_images), axis=0)
         if test_images:
             self.test_images = np.concatenate((self.test_images, test_images), axis=0)
-        # self.train_images.extend(train_images)
-        # self.test_images.extend(test_images)
         self.train_labels.extend([class_label] * train_len)
         self.test_labels.extend([class_label] * test_len)
         if self.get_embedding is not None:
@@ -146,7 +146,6 @@ class FaceBase:
         print(colored('[FACE BASE]', 'blue'), f'Updating face base took {time.time() - start}')
         self.save()
         return True
-
 
     def init_face_base(self, **kwargs):
         """
@@ -176,8 +175,8 @@ class FaceBase:
 
             self.classes = faces['classes']
             self.train_labels, self.train_images, self.train_embeddings, self.test_labels, \
-            self.test_images, self.test_embeddings = faces['train_labels'], faces['train_images'],\
-                                                     faces['train_embeddings'], faces['test_labels'],\
+            self.test_images, self.test_embeddings = faces['train_labels'], faces['train_images'], \
+                                                     faces['train_embeddings'], faces['test_labels'], \
                                                      faces['test_images'], faces['test_embeddings']
 
     def save(self):
@@ -189,7 +188,8 @@ class FaceBase:
         params = {'align_faces': self.align_faces, 'image_size': self.image_size,
                   'quantize': self.quantize, 'nrof_train_images': self.nrof_train_images}
         faces = {'classes': self.classes, 'train_labels': self.train_labels, 'train_images': self.train_images,
-                 'train_embeddings': self.train_embeddings, 'test_labels': self.test_labels, 'test_images': self.test_images,
+                 'train_embeddings': self.train_embeddings, 'test_labels': self.test_labels,
+                 'test_images': self.test_images,
                  'test_embeddings': self.test_embeddings}
         with open(os.path.join(self.path, self.store_file), 'wb+') as file:
             pickle.dump({'params': params, 'faces': faces}, file)

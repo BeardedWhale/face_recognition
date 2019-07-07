@@ -3,14 +3,13 @@ import os
 
 import cv2
 import imutils
-from imutils.video import FileVideoStream, VideoStream
+from imutils.video import VideoStream
 from termcolor import colored
 
 from face import TrackableFace
 from face_detection import FaceDetector
 from face_tracking import MultipleFaceTracker
 from models.facenet.facenet import Facenet
-import time
 
 
 def start_tracking(config):
@@ -80,7 +79,6 @@ def start_tracking(config):
 
             text = f"ID {faceID}, {face.name}:{face.prob}"
             faces_info.append({'text': text, 'centroid': centroid})
-
         for info in faces_info:
             centroid = info['centroid']
             text = info['text']
@@ -100,8 +98,6 @@ def start_tracking(config):
         if key == ord("q"):
             break
         total_frames += 1
-        if total_frames == 1:
-            time.sleep(20)
 
 
 if __name__ == '__main__':

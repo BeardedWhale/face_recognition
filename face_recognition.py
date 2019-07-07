@@ -1,9 +1,9 @@
 import time
 from collections import Counter
 from typing import List, Tuple
+from abc import ABC
 
-
-class FaceRecognizer:
+class FaceRecognizer(ABC):
     def __init__(self):
         pass
 
@@ -24,6 +24,8 @@ class FaceRecognizer:
         start = time.time()
         faces, confidences = self.recognize_faces(faces, conf=0.6)
         face_labels.update(faces)
+
+        print(faces)
         label, count = face_labels.most_common(1)[0]
         conf = count / sum(face_labels.values())
         print(f'Face recognition for {len(faces)} faces took {time.time() - start}')

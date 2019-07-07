@@ -1,4 +1,3 @@
-import json
 import math
 import os
 from collections import OrderedDict
@@ -17,10 +16,8 @@ def to_rgb(img):
 
 
 def prewhiten(x):
-    dtype = x.dtype
     mean = np.mean(x)
     std = np.std(x)
-    size = x.size
     std_adj = np.maximum(std, 1.0 / np.sqrt(x.size))
     y = np.multiply(np.subtract(x, mean), 1 / std_adj).astype(np.float32)
     return y
@@ -127,6 +124,7 @@ def get_image_paths_and_labels(data_path):
         labels.extend([i] * len(images_paths))
     return classes, labels, paths
 
+
 def get_images_paths(folder, nrof_train_images):
     """
     Loads all images from given folder
@@ -140,12 +138,12 @@ def get_images_paths(folder, nrof_train_images):
     return train_images, test_images
 
 
-def get_faces_paths_and_labels(data_path, classes,  nrof_train_images)->Tuple[List, List, List, List]:
+def get_faces_paths_and_labels(data_path, classes, nrof_train_images) -> Tuple[List, List, List, List]:
     """
     Loads faces dataset, ignores folders that are not in config.json
-    :param data_path:
+    :param data_path: path to data folder
     :param classes: list of classes
-    :param nrof_train_images:
+    :param nrof_train_images: number of images to use for train, rest for testing
     :return: trian_labels, train_paths, test_labels, test_paths
     """
     data_path = os.path.expanduser(data_path)
@@ -169,8 +167,7 @@ def get_faces_paths_and_labels(data_path, classes,  nrof_train_images)->Tuple[Li
     return trian_labels, train_paths, test_labels, test_paths
 
 
-
-def load_images(image_paths, image_size, quantize=False, align=False)->np.array:
+def load_images(image_paths, image_size, quantize=False, align=False) -> np.array:
     nrof_samples = len(image_paths)
     images = []
     for i in range(nrof_samples):
@@ -184,11 +181,13 @@ def load_images(image_paths, image_size, quantize=False, align=False)->np.array:
     return np.array(images)
 
 
-def align_faces(img, box=(0, 0, 0, 0)):
+def align_faces(img, box=(0, 0, 0, 0), conf=0.5):
     """
     aligns face in the image
     :param img: rgb image
-    :return: 0/1, aligned image
+    :param box: face coordinates
+    :param conf: confidence in iou of known box and inferred
+    :return: aligned image, 0 for fail, 1 for success
     """
 
     dets = detector(img, 1)
@@ -205,8 +204,8 @@ def align_faces(img, box=(0, 0, 0, 0)):
 
     if len(faces) == 0:
         return img, 0
-
-    if target_face_index >= 0 and max_iou >= 0.5 and box != (0, 0, 0, 0):
+    # print(max_iou)
+    if target_face_index >= 0 and max_iou >= conf and box != (0, 0, 0, 0):
         img = dlib.get_face_chip(img, faces[target_face_index], size=160)
         return img, 1
     if faces and box == (0, 0, 0, 0):

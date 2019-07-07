@@ -15,30 +15,24 @@ Classification model:
     -- use_emb_model
 """
 import itertools
-import json
-import math
 import os
 import pickle
-import sys
 import time
+import warnings
 
 import numpy as np
 import tensorflow as tf
-from keras import Input, Model
 from keras.engine.saving import load_model
-from keras.layers import Dense, BatchNormalization, Dropout
 from sklearn.neighbors import KNeighborsClassifier as KNN
 from sklearn.svm import SVC
 from tensorflow.python.platform import gfile
-from matplotlib import pyplot as plt
 from termcolor import colored
-from tqdm import tqdm
 
-# from face_recognition import FaceRecognizer
 from face_recognition import FaceRecognizer
+from models.facenet.embedding_model import EmbeddingModel
 from models.facenet.triplet_loss import batch_hard_triplet_loss
 from utils.face_base import FaceBase
-from utils.image_utils import preprocess_image, load_images, get_faces_paths_and_labels, get_images_paths
+from utils.image_utils import preprocess_image
 
 
 def load_facenet_model(facenet_path, input_map=None):
@@ -93,7 +87,8 @@ class Facenet(FaceRecognizer):
         # Load Facenet model
         self.tflite = tflite
         self.emb_model_path = f'models/facenet/embedding_model{"_tflite" if tflite else ""}.h5'
-        self.emb_model = load_emb_model(self.emb_model_path)
+        self.emb_model = EmbeddingModel(512)
+        self.emb_model.load(self.emb_model_path)
         if not self.tflite:
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -112,10 +107,10 @@ class Facenet(FaceRecognizer):
         self.classifier_path = f'models/facenet/face_classifier_{classifier_type}{"_tflite" if tflite else ""}.pk'
         self.classifier_type = classifier_type
         self.image_size = 160
-        self.classifier= load_classifier(self.classifier_path)
+        self.classifier = load_classifier(self.classifier_path)
         self.class_names = []
         if not self.classifier:
-            print(colored('You need to pretrain face classifier before applying face recognition', 'red'))
+            warnings.warn('You need to pretrain face classifier before applying face recognition', ResourceWarning)
         self.facenet_embedding_size = 512
         self.facebase = FaceBase(face_base_path, get_embedding=self.get_embedding, quantize=self.tflite,
                                  image_size=160, align_faces=align_faces, nrof_train_images=nrof_train_images)
@@ -143,7 +138,7 @@ class Facenet(FaceRecognizer):
                 emb_array = sess.run(self.embeddings, feed_dict=feed_dict)
         return emb_array
 
-    def recognize_faces(self, faces_img, conf=0.7):
+    def recognize_faces(self, faces_img, conf=0.6):
         """
         Classifies given face image according to known faces' names.
         1. Take Facenet embedding
@@ -152,17 +147,12 @@ class Facenet(FaceRecognizer):
         3. Classifies image using simple classifier
         :param faces_img: np.array. Image should be in rgb, cropped and aligned according to detected face
         :param conf: confidence bound to drop inkown faces
-        :param box: face box in order to align not aligned face
         :return: list of faces labels, list of probabilities
         """
         if not self.classifier:
             print(colored('You need to pretrain face classifier!', 'red'))
             return 'Unkown', 0.0
-        # plt.imshow(faces_img[0])
-        # plt.show()
         faces_img = np.array([preprocess_image(img, False, False, 160, do_quantize=self.tflite) for img in faces_img])
-        # plt.imshow(faces_img[0])
-        # plt.show()
         facenet_embedding = np.zeros((len(faces_img), self.facenet_embedding_size))
         # Get facenet embeddings
         if self.tflite:
@@ -172,12 +162,14 @@ class Facenet(FaceRecognizer):
             facenet_embedding = self.get_embedding(faces_img)
 
         # Get new embedding
+        print(type(self.emb_model))
         embedding = self.emb_model.predict(facenet_embedding)
         # Classify
         predictions = self.classifier.predict_proba(embedding)
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         names = [self.class_names[index] for index in best_class_indices]
+
         for i in range(len(names)):
             if best_class_probabilities[i] < conf:
                 names[i] = 'Unknown'
@@ -187,11 +179,9 @@ class Facenet(FaceRecognizer):
     def train_classifier(self, **kwargs):
         """
         Trains classifier to classify face features
-        :param train_data_path: path to train data
-        :param test_data_pth: path to test data
-        :param batch_size: size
         :param kwargs:
             - n_neighbors: n_neighbors for KNN
+            - kernel: svc kernel
         :return:
         """
         n_neighbors = kwargs.get('n_neighbors', 5)
@@ -225,65 +215,20 @@ class Facenet(FaceRecognizer):
         self.classifier = model
         return accuracy
 
-    def train_embeddings(self, margin=0.6, **kwargs):
+    def train_embeddings(self, margin=0.6, batch_size=50, epochs=80, val_split=0.3):
         """
         Trains embeddings from facenet embeddings using triplet loss
-        :param train_path: train faces embeddings from facenet
         :param margin: margin for triplet loss
-        :param test_path: path for test data
-            - batch_size: size of training batch
-            - epochs: number of epochs to train
-            - validation_split: which part of data use for validation
-            - align faces: align faces while loading dataset
-        :return: nothin
+        :param batch_size: size of training batch
+        :param epochs: number of epochs to train
+        :param val_split: which part of data use for validation
+        :return: nothing
         """
-        batch_size = kwargs.get('batch_size', 50)
-        epochs = kwargs.get('epochs', 80)
-        val_split = kwargs.get('validation_split', 0.3)
-
-        triplet_loss = get_triplet_loss(margin)
-        # Define embedding model
-        """
-        _________________________________________________________________
-        Layer (type)                 Output Shape              Param #   
-        =================================================================
-        input (InputLayer)        (None, 512)               0         
-        _________________________________________________________________
-        dense (Dense)             (None, 256)               131328    
-        _________________________________________________________________
-        dropout (Dropout)         (None, 256)               0         
-        _________________________________________________________________
-        batch_normalization (Batc (None, 256)               1024      
-        _________________________________________________________________
-        dense (Dense)             (None, 512)               131584    
-        _________________________________________________________________
-        batch_normalization (Batc (None, 512)               2048      
-        =================================================================
-        Total params: 265,984
-        Trainable params: 264,448
-        Non-trainable params: 1,536
-        ________________________________________
-        """
-        emb = Input(shape=(self.facenet_embedding_size,), dtype='float32')
-        dense_1 = Dense(self.facenet_embedding_size // 2, activation='linear', kernel_regularizer='l2')
-        norm = BatchNormalization()
-        dense_2 = Dense(self.facenet_embedding_size, activation='linear', kernel_regularizer='l2')
-        dropout = Dropout(0.5)
-        norm2 = BatchNormalization()
-
-        x = dense_1(emb)
-        x = dropout(x)
-        x = norm(x)
-        x = dense_2(x)
-        x = norm2(x)
-
-        model = Model(inputs=emb, outputs=x)
-        model.compile(loss=triplet_loss, optimizer='adam', metrics=[])
-        # model.summary()
+        model = EmbeddingModel(self.facenet_embedding_size, margin)
         # Training model
         start = time.time()
         history = model.fit(self.facebase.train_embeddings, self.facebase.train_labels, epochs=epochs,
-                            batch_size=50, shuffle=False, validation_split=val_split, verbose=0)
+                            validation_split=val_split, batch_size=batch_size)
         print(colored('[FACENET]', 'green'), f'Training emb model time: {time.time() - start}')
         val_loss_history = history.history['val_loss']
         val_loss = [val_loss_history[-1]]
@@ -291,42 +236,29 @@ class Facenet(FaceRecognizer):
         loss = model.evaluate(self.facebase.test_embeddings, self.facebase.test_labels)
         val_loss.append(loss)
         self.emb_model = model
-        model.save(self.emb_model_path)
-        print(colored('[FACENET]', 'green'), f'Saved model to {Facenet.FACENET_EMB_MODEL_PATH}')
+        print(self.emb_model_path)
+        self.emb_model.save(self.emb_model_path)
+        print(colored('[FACENET]', 'green'), f'Saved model to {self.emb_model_path}')
         return val_loss
 
-    def update_model(self, faces, name, **kwargs):
+    def update_model(self, faces, name, epochs=50, val_split=0.3, margin=0.6, need_tuning=True,
+                     classifier_type='knn'):
         """
         Updates tripnet embeddings model and KNN for face classification with new user and his faces
-        :param new_name: name of a new person to add to base and classifier
-        :param kwargs:
-            - batch_size: size of training batch
-            - epochs: number of epochs to train
-            - validation_split: which part of data use for validation
-            - align faces: align faces while loading dataset
-            - n_neighbors: n_neighbors for KNN
-            - margin: margin for triplet loss
-            - nrof_train_images: number of images of person to use for training, rest of them for testing
-            - classifier_type: type of a classifier to use for update
-        :return: True in case of successful update, False otherwise
+        :param name: name of a new person to add to base and classifier
+        :param batch_size: size of training batch
+        :param epochs: number of epochs to train
+        :param val_split: which part of data use for validation
+        :param margin: margin for triplet loss
+        :param classifier_type: type of a classifier to use for update
+        :return: nothing
         """
         if faces:
             self.facebase.update(faces, name)
             self.class_names = self.facebase.classes
         total_start = time.time()
-        batch_size = kwargs.get('batch_size', 50)
-        epochs = kwargs.get('epochs', 50)
-        val_split = kwargs.get('validation_split', 0.2)
-        align_faces = kwargs.get('align_faces', False)
-        n_neighbors = kwargs.get('n_neighbors', 5)
-        kernel = kwargs.get('kernel', 'rbf')
-        margin = kwargs.get('margin', 0.6)
-        need_tuning = kwargs.get('need_tuning', True)
-        classifier_type = kwargs.get('classifier_type', 'knn')
-        nrof_train_images = kwargs.get('nrof_train_images', 12)
         # Training embedding net
-        losses = self.train_embeddings(dataset=self.facebase, margin=margin,
-                                       validation_split=val_split, epochs=epochs)
+        losses = self.train_embeddings(margin=margin, val_split=val_split, epochs=epochs)
         print(colored('[FACENET]', 'green'), f'Embeddings triplet losses:{losses}')
         # Training classifier
         train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
@@ -369,4 +301,3 @@ class Facenet(FaceRecognizer):
             pickle.dump(classifier, outfile)
         print('Done.')
         print(colored(f'[FACENET] Updating models took: {time.time() - total_start}', 'green'))
-        return True
