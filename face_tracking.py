@@ -32,6 +32,7 @@ class MultipleFaceTracker:
         """
         Registers new face with new ID and face centroid and box
         """
+
         self.faces[self.next_faceID] = (centroid, box)
         self.disappeared[self.next_faceID] = 0
         self.next_faceID += 1

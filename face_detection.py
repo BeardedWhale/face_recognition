@@ -1,4 +1,3 @@
-import time
 from functools import partial
 
 import cv2

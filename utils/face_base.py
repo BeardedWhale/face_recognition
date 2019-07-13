@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 import cv2
 import numpy as np
-from termcolor import colored
+from loguru import logger
 from tqdm import tqdm
 
 from utils.image_utils import get_faces_paths_and_labels, load_images, preprocess_image, to_rgb
@@ -54,14 +54,18 @@ class FaceBase:
         self.nrof_train_images = kwargs.get('nrof_train_images')
         start = time.time()
         self.init_face_base(**kwargs)
-        print(colored('[FACE BASE]', 'blue'), f'Loading took: {time.time() - start}')
+        logger.debug(f'Align faces: {self.align_faces}')
+        logger.debug(f'Image size: {self.image_size}')
+        logger.debug(f'Quantize: {self.quantize}')
+        logger.debug(f'Number of train images: {self.nrof_train_images}')
+        logger.info(f'Loading face base took: {time.time() - start}')
 
     def load_base_from_folder(self):
         """
         Loads dataset
         :return:
         """
-        print(colored('[FACE BASE]', 'blue'), f'Loading face base from {self.path} folder')
+        logger.info(f'Loading face base from {self.path} folder')
         data_path = os.path.expanduser(self.path)
         inner_folders = os.listdir(self.path)
         inner_folders = [folder for folder in inner_folders if os.path.isdir(os.path.join(data_path, folder))]
@@ -75,15 +79,12 @@ class FaceBase:
             classes[i] = class_name
 
         self.classes = list(classes.values())
-        print(colored('[FACE BASE]', 'blue'))
-        print('Face base classes:', self.classes)
+        logger.info(f'Face base classes: {self.classes}')
         train_labels, train_paths, test_labels, test_paths = \
             get_faces_paths_and_labels(self.path, self.classes, self.nrof_train_images)
-
-        print(f'Number of classes: {len(self.classes)}')
-        print(f'Number of train images: {len(train_paths)}')
-        print(f'Number of test images: {len(test_paths)}')
-        print('Calculating features for images...')
+        logger.info(f'Number of classes: {len(self.classes)}')
+        logger.info(f'Number of train images: {len(train_paths)}')
+        logger.info(f'Number of test images: {len(test_paths)}')
         train_len = len(train_paths)
         images_paths = train_paths + test_paths
         nrof_images = len(images_paths)
@@ -115,7 +116,6 @@ class FaceBase:
         self.classes.append(name)
         data_path_exp = os.path.expanduser(self.path)
         new_dir = os.path.join(data_path_exp, name)
-        print('name')
         os.mkdir(new_dir)
         for i, face in enumerate(faces):
             face = to_rgb(face)
@@ -143,7 +143,7 @@ class FaceBase:
         if self.get_embedding is not None:
             assert len(self.train_embeddings) == len(self.train_labels)
             assert len(self.test_embeddings) == len(self.test_labels)
-        print(colored('[FACE BASE]', 'blue'), f'Updating face base took {time.time() - start}')
+        logger.info(f'Updating face base took {time.time() - start}')
         self.save()
         return True
 
@@ -170,7 +170,6 @@ class FaceBase:
             self.image_size = params.get('image_size', 160)
             self.quantize = params.get('quantize', False)
             self.nrof_train_images = params.get('nrof_train_images')
-
             faces = face_base['faces']
 
             self.classes = faces['classes']
@@ -184,7 +183,7 @@ class FaceBase:
         Saves face to pickle file
         :return: nothing
         """
-        print(colored('[FACE BASE]', 'blue'), 'Saving face base...')
+        logger.info('Saving face base...')
         params = {'align_faces': self.align_faces, 'image_size': self.image_size,
                   'quantize': self.quantize, 'nrof_train_images': self.nrof_train_images}
         faces = {'classes': self.classes, 'train_labels': self.train_labels, 'train_images': self.train_images,

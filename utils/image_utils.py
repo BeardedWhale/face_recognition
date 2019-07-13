@@ -6,6 +6,7 @@ from typing import Tuple, List
 import cv2
 import dlib
 import numpy as np
+from loguru import logger
 
 detector = dlib.get_frontal_face_detector()
 sp = dlib.shape_predictor('utils/shape_predictor_5_face_landmarks.dat')
@@ -203,14 +204,14 @@ def align_faces(img, box=(0, 0, 0, 0), conf=0.5):
         faces.append(sp(img, detection))
 
     if len(faces) == 0:
+        logger.debug('Could not align face')
         return img, 0
-    # print(max_iou)
     if target_face_index >= 0 and max_iou >= conf and box != (0, 0, 0, 0):
         img = dlib.get_face_chip(img, faces[target_face_index], size=160)
         return img, 1
     if faces and box == (0, 0, 0, 0):
         return dlib.get_face_chip(img, faces[0], size=160), 1
-
+    logger.debug('Could not align face')
     return img, 0
 
 

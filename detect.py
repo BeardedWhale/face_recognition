@@ -1,10 +1,11 @@
 import argparse
 import os
+import sys
 
 import cv2
 import imutils
 from imutils.video import VideoStream
-from termcolor import colored
+from loguru import logger
 
 from face import TrackableFace
 from face_detection import FaceDetector
@@ -34,15 +35,14 @@ def start_tracking(config):
 
     # instantiate our centroid tracker, then initialize a list to store
     # each of our dlib correlation trackers, followed by a dictionary to
-    # map each unique object ID to a TrackableFace
+    # map each unique object ID to a Face
     ct = MultipleFaceTracker(tracker_type='correlation', max_disappeared=40, max_distance=50)
     fd = FaceDetector(config)
     fr = None
-    if mode == 2:
-        if config.recognizer == 'facenet':
-            fr = Facenet(classifier_type='KNN', tflite=True)
-    print('Initialized models')
-
+    if mode == 2 and config.recognizer == 'facenet':
+        fr = Facenet(classifier_type='KNN', tflite=True)
+    status = 'Waiting'
+    logger.debug('Initialized models')
     while True:
         frame = vs.read()
         if frame is None:
@@ -52,7 +52,6 @@ def start_tracking(config):
 
         if W is None or H is None:
             (H, W) = frame.shape[:2]
-        status = "Waiting"
         tracked_faces = []
         if total_frames % detection_rate == 0:
             status = "Detecting"
@@ -90,7 +89,6 @@ def start_tracking(config):
             text = "{}: {}".format(k, v)
             cv2.putText(frame, text, (10, H - ((i * 20) + 20)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
         cv2.imshow("Frame", frame)
         key = cv2.waitKey(1) & 0xFF
 
@@ -118,11 +116,16 @@ if __name__ == '__main__':
     parser.add_argument('--detection_conf', type=float, default=0.7)
     parser.add_argument('--classifier_type', type=str, default='KNN')
     parser.add_argument('--tflite', type=bool, default=True)
+    # parser.add_argument('--log_file', type=str, default='')
+    parser.add_argument('--log_level', type=int, default=10, choices=[5, 10, 20, 25, 30, 40, 50],
+                        help='log levels 5-trace, 10 debug, 20-info, etc.')
     configuration = parser.parse_args()
+    logger.remove()
+    logger.add(sink=sys.stderr, level=configuration.log_level,
+               format='<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>')
 
-    print('*' * 30)
-    print(colored('FACE DETECTION MODEL:', 'blue'), configuration.detector, '\n')
-    print(colored('FACE TRACKING MODEL:', 'blue'), configuration.tracker, '\n')
-    print(colored('FACE RECOGNITION MODEL:', 'blue'), configuration.recognizer, '\n')
-    print('*' * 30)
+    logger.info(f'MODE: {configuration.mode}')
+    logger.info(f'FACE DETECTION MODEL: {configuration.detector}')
+    logger.info(f'FACE TRACKING MODEL: {configuration.tracker}')
+    logger.info(f'FACE RECOGNITION MODEL: {configuration.recognizer}')
     start_tracking(configuration)

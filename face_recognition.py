@@ -1,10 +1,14 @@
 import time
+from abc import ABC
 from collections import Counter
 from typing import List, Tuple
-from abc import ABC
+
+from loguru import logger
+
 
 class FaceRecognizer(ABC):
     def __init__(self):
+        # self.logger = log
         pass
 
     def recognize_faces(self, faces_img: List, conf=0.7) -> Tuple[List, List]:
@@ -22,13 +26,13 @@ class FaceRecognizer(ABC):
         """
         face_labels = Counter()
         start = time.time()
-        faces, confidences = self.recognize_faces(faces, conf=0.6)
+        faces, confidences = self.recognize_faces(faces, conf=0.6)  # TODO add as a paramter
         face_labels.update(faces)
 
-        print(faces)
+        logger.debug(f'Detected faces: {list(zip(faces, confidences))}')
         label, count = face_labels.most_common(1)[0]
         conf = count / sum(face_labels.values())
-        print(f'Face recognition for {len(faces)} faces took {time.time() - start}')
+        logger.info(f'Face recognition for {len(faces)} faces took {time.time() - start}')
         if conf > confidence:
             return label, conf
         else:

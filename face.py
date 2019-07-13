@@ -1,6 +1,7 @@
 import os
 
 import cv2
+from loguru import logger
 
 from face_recognition import FaceRecognizer
 from utils.image_utils import align_faces
@@ -35,7 +36,6 @@ class TrackableFace:
         self.faces = []
 
     def authorize(self, frame, face_recognizer: FaceRecognizer):
-
         if self.failed_detections >= TrackableFace.MAX_FAILED:
             name = face_recognizer.register_new_face(self.faces, self.faceID)
             self.name, self.prob = name, 1.0
@@ -54,7 +54,7 @@ class TrackableFace:
         else:
             self.name = label
             self.prob = conf
-            print(f'Registered face {self.faceID} as {label}')
+            logger.success(f'Registered face {self.faceID} as {label}')
 
     def save_face(self, frame):
         """

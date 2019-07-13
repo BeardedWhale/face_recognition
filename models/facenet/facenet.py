@@ -23,10 +23,10 @@ import warnings
 import numpy as np
 import tensorflow as tf
 from keras.engine.saving import load_model
+from loguru import logger
 from sklearn.neighbors import KNeighborsClassifier as KNN
 from sklearn.svm import SVC
 from tensorflow.python.platform import gfile
-from termcolor import colored
 
 from face_recognition import FaceRecognizer
 from models.facenet.embedding_model import EmbeddingModel
@@ -38,7 +38,7 @@ from utils.image_utils import preprocess_image
 def load_facenet_model(facenet_path, input_map=None):
     facenet_exp = os.path.expanduser(facenet_path)
     if os.path.isfile(facenet_exp):
-        print('Model filename: %s' % facenet_exp)
+        logger.info('Model filename: %s' % facenet_exp)
         with gfile.FastGFile(facenet_exp, 'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
@@ -150,7 +150,7 @@ class Facenet(FaceRecognizer):
         :return: list of faces labels, list of probabilities
         """
         if not self.classifier:
-            print(colored('You need to pretrain face classifier!', 'red'))
+            logger.warning('You need to pretrain face classifier!')
             return 'Unkown', 0.0
         faces_img = np.array([preprocess_image(img, False, False, 160, do_quantize=self.tflite) for img in faces_img])
         facenet_embedding = np.zeros((len(faces_img), self.facenet_embedding_size))
@@ -162,14 +162,13 @@ class Facenet(FaceRecognizer):
             facenet_embedding = self.get_embedding(faces_img)
 
         # Get new embedding
-        print(type(self.emb_model))
         embedding = self.emb_model.predict(facenet_embedding)
         # Classify
         predictions = self.classifier.predict_proba(embedding)
         best_class_indices = np.argmax(predictions, axis=1)
         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
         names = [self.class_names[index] for index in best_class_indices]
-
+        logger.debug(f'Detected faces: {list(zip(names, best_class_probabilities))}')
         for i in range(len(names)):
             if best_class_probabilities[i] < conf:
                 names[i] = 'Unknown'
@@ -186,8 +185,7 @@ class Facenet(FaceRecognizer):
         """
         n_neighbors = kwargs.get('n_neighbors', 5)
         kernel = kwargs.get('kernel', 'rbf')
-
-        print(colored('[FACENET]', 'green'), f'Training {self.classifier_type} classifier...')
+        logger.info(f'Training {self.classifier_type} classifier...')
         start = time.time()
         if self.classifier_type == 'KNN':
             model = KNN(n_neighbors=n_neighbors)
@@ -196,11 +194,11 @@ class Facenet(FaceRecognizer):
         train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
         test_embeddings = self.emb_model.predict(self.facebase.test_embeddings)
         model.fit(train_embeddings, self.facebase.train_labels)
-        print(colored('[FACENET]', 'green'), f'Training time: {time.time() - start}')
+        logger.info(f'Training time: {time.time() - start}')
         classifier_path = f'models/facenet/face_classifier_{self.classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
         classifier_filename_exp = os.path.expanduser(classifier_path)
-        print(colored('[FACENET]', 'green'), f'Saving {self.classifier_type} to {classifier_filename_exp}...')
+        logger.info(f'Saving {self.classifier_type} to {classifier_filename_exp}...')
         with open(classifier_filename_exp, 'wb') as outfile:
             pickle.dump(model, outfile)
 
@@ -209,9 +207,10 @@ class Facenet(FaceRecognizer):
         best_class_indices = np.argmax(predictions, axis=1)
         for i in range(len(best_class_indices)):
             if best_class_indices[i] != self.facebase.test_labels[i]:
-                print(colored(f'{best_class_indices[i]}, {self.facebase.test_labels[i]}', 'red'))
+                logger.debug(f'false: {self.class_names[best_class_indices[i]]},'
+                             f' true: {self.class_names[self.facebase.test_labels[i]]}')
         accuracy = np.mean(np.equal(best_class_indices, self.facebase.test_labels))
-        print(colored('[FACENET]', 'green'), f'Evaluation {self.classifier_type} accuracy: {accuracy}')
+        logger.info(f'Evaluation {self.classifier_type} accuracy: {accuracy}')
         self.classifier = model
         return accuracy
 
@@ -229,16 +228,15 @@ class Facenet(FaceRecognizer):
         start = time.time()
         history = model.fit(self.facebase.train_embeddings, self.facebase.train_labels, epochs=epochs,
                             validation_split=val_split, batch_size=batch_size)
-        print(colored('[FACENET]', 'green'), f'Training emb model time: {time.time() - start}')
+        logger.info(f'Training emb model time: {time.time() - start}')
         val_loss_history = history.history['val_loss']
         val_loss = [val_loss_history[-1]]
-        print(colored('[FACENET]', 'green'), f'Emb model Val Loss: {val_loss[0]}')
+        logger.info(f'Emb model Val Loss: {val_loss[0]}')
         loss = model.evaluate(self.facebase.test_embeddings, self.facebase.test_labels)
         val_loss.append(loss)
         self.emb_model = model
-        print(self.emb_model_path)
         self.emb_model.save(self.emb_model_path)
-        print(colored('[FACENET]', 'green'), f'Saved model to {self.emb_model_path}')
+        logger.info(f'Saved embedding model to {self.emb_model_path}')
         return val_loss
 
     def update_model(self, faces, name, epochs=50, val_split=0.3, margin=0.6, need_tuning=True,
@@ -257,9 +255,10 @@ class Facenet(FaceRecognizer):
             self.facebase.update(faces, name)
             self.class_names = self.facebase.classes
         total_start = time.time()
+        logger.debug(f'Margin for triplet loss: {margin}')
         # Training embedding net
         losses = self.train_embeddings(margin=margin, val_split=val_split, epochs=epochs)
-        print(colored('[FACENET]', 'green'), f'Embeddings triplet losses:{losses}')
+        logger.info(f'Embeddings triplet losses:{losses}')
         # Training classifier
         train_embeddings = self.emb_model.predict(self.facebase.train_embeddings)
         test_embeddings = self.emb_model.predict(self.facebase.test_embeddings)
@@ -290,14 +289,14 @@ class Facenet(FaceRecognizer):
             accs.append(np.mean(np.equal(predictions, self.facebase.test_labels)))
         best_id = np.argmax(accs, axis=0)
         self.classifier = classifiers[best_id]
-        print(colored('[FACENET]', 'green'), f'Classifier tuning took: {time.time() - start}')
-        print(colored('[FACENET]', 'green'), f'Classifier accuracy:{accs[best_id]}')
+        logger.info(f'Classifier tuning took: {time.time() - start}')
+        logger.info(f'Classifier accuracy:{accs[best_id]}')
 
         classifier_path = f'models/facenet/face_classifier_{classifier_type}' \
                           f'{"_tflite" if self.tflite else ""}.pk'
         classifier_filename_exp = os.path.expanduser(classifier_path)
-        print(colored('[FACENET]', 'green'), f'Saving {classifier_type} to {classifier_filename_exp}...')
+        logger.info(f'Saving {classifier_type} to {classifier_filename_exp}...')
         with open(classifier_filename_exp, 'wb') as outfile:
             pickle.dump(classifier, outfile)
-        print('Done.')
-        print(colored(f'[FACENET] Updating models took: {time.time() - total_start}', 'green'))
+        logger.info('Updating models took: {time.time() - total_start}')
+        logger.success('Recognition model updated!')

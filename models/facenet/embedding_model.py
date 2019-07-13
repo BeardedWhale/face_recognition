@@ -1,10 +1,8 @@
+import numpy as np
+import tensorflow as tf
 from keras import Input, Model
 from keras.engine.saving import load_model
 from keras.layers import Dense, BatchNormalization, Dropout
-
-from models.facenet import triplet_loss
-import tensorflow as tf
-import numpy as np
 
 # from models.facenet.facenet import get_triplet_loss
 from models.facenet.triplet_loss import batch_hard_triplet_loss
@@ -15,7 +13,6 @@ def get_triplet_loss(margin=0.6):
         return batch_hard_triplet_loss(labels, embeddings, margin=margin, squared=False)
 
     return triplet_loss
-
 
 
 class EmbeddingModel:
@@ -79,13 +76,15 @@ class EmbeddingModel:
         with self.graph.as_default():
             with self.session.as_default():
                 history = self.model.fit(X, Y, epochs=epochs,
-                            batch_size=batch_size, shuffle=False, validation_split=validation_split, verbose=0)
+                                         batch_size=batch_size, shuffle=False, validation_split=validation_split,
+                                         verbose=0)
                 return history
 
     def predict(self, x):
         with self.graph.as_default():
             with self.session.as_default():
                 return self.model.predict(x)
+
     def evaluate(self, x, y):
         with self.graph.as_default():
             with self.session.as_default():
@@ -95,4 +94,3 @@ class EmbeddingModel:
         with self.graph.as_default():
             with self.session.as_default():
                 self.model.save(file_name)
-
