@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+.ipynb_checkpoints/
+__pycache__/
+face_base/*
+models/facenet/embedding_model.h5
+models/facenet/embedding_model_tflite.h5
+models/facenet/face_classifier_KNN.pk
+models/facenet/face_classifier_KNN_tflite.pk
+models/facenet/face_classifier_SVC_tflite.pk
+models/facenet/face_classifier_SVC.pk
+trackable_faces/*
+venv/
